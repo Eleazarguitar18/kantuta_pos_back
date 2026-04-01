@@ -99,6 +99,12 @@ npm run test:e2e
 npm run test:cov
 ```
 
+## 🔍 Colección de Endpoints (Bruno)
+
+Para facilitar las pruebas de integración y manuales, puedes encontrar la colección oficial de endpoints configurada para [Bruno](https://www.usebruno.com/) en el siguiente repositorio:
+
+👉 **[GitHub: Rutea_enpoints](https://github.com/Eleazarguitar18/Rutea_enpoints.git)**
+
 ## 📝 Licencia / Contexto Legal
 
-`backend_rutea` se encuentra actualmente bajo la figura **UNLICENSED** y pertenece privadamente a sus respectivos autores o entidad mantenedora.
+`backend_rutea` se encuentra actualmente bajo la figura **UNLICENSED** y es propiedad intelectual de **Elecode** y su empresa de desarrollo **Vortex**. Todos los derechos reservados.
