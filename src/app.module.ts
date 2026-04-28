@@ -17,6 +17,10 @@ import { RedisConfig } from './config/redis.config';
 import { JwtConfig } from './config/jwt.config';
 import { DatabaseConfig } from './config/database.config';
 import { RedisManagerModule } from './redis-manager/redis-manager.module';
+import { InventarioModule } from './inventario/inventario.module';
+import { CajasModule } from './cajas/cajas.module';
+import { VentasModule } from './ventas/ventas.module';
+import { AgentesModule } from './agentes/agentes.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -34,6 +38,10 @@ import { RedisManagerModule } from './redis-manager/redis-manager.module';
     PuntosModule,
     MailModule,
     RedisManagerModule,
+    InventarioModule,
+    CajasModule,
+    VentasModule,
+    AgentesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
