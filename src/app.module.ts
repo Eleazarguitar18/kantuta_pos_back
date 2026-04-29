@@ -8,9 +8,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsuarioModule } from './usuario/usuario.module';
 import { JwtModule } from '@nestjs/jwt';
 // import { jwtConstants } from './auth/config/constants';
-import { LineasModule } from './lineas/lineas.module';
-import { RutasModule } from './rutas/rutas.module';
-import { PuntosModule } from './puntos/puntos.module';
 import { MailModule } from './mail/mail.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { RedisConfig } from './config/redis.config';
@@ -33,9 +30,6 @@ import { AgentesModule } from './agentes/agentes.module';
     AuthModule,
     PersonaModule,
     UsuarioModule,
-    LineasModule,
-    RutasModule,
-    PuntosModule,
     MailModule,
     RedisManagerModule,
     InventarioModule,
@@ -46,4 +40,4 @@ import { AgentesModule } from './agentes/agentes.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

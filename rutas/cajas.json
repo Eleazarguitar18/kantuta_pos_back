@@ -1,0 +1,38 @@
+[
+  {
+    "method": "POST",
+    "path": "/cajas/abrir",
+    "description": "Abrir una nueva sesión de caja",
+    "body": {
+      "cajaId": 1,
+      "monto_inicial": 100.00,
+      "usuarioId": 2
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/cajas/movimiento",
+    "description": "Crear un movimiento (ingreso o egreso) en la sesión de caja activa",
+    "body": {
+      "tipo": "EGRESO",
+      "monto": 25.50,
+      "motivo": "Compra de bolsas para empaque",
+      "sesion_caja_id": 1
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/cajas/cerrar",
+    "description": "Cerrar la sesión de caja activa",
+    "body": {
+      "sesion_caja_id": 1,
+      "monto_final_real": 150.00
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/cajas",
+    "description": "Obtener estado general de cajas",
+    "body": null
+  }
+]

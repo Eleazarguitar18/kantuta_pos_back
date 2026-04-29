@@ -1,0 +1,188 @@
+{
+  "info": {
+    "name": "Rutas Tienda Backend",
+    "description": "Colección de rutas generada para importar en Bruno directamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Inventario",
+      "item": [
+        {
+          "name": "Crear Producto",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Audífonos Bluetooth Sony WH-1000XM4\",\n  \"codigo_barras\": \"102030405060\",\n  \"precio_venta\": 120.00,\n  \"costo_compra\": 70.00,\n  \"stock_actual\": 15,\n  \"stock_minimo\": 5,\n  \"categoriaId\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/inventario",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["inventario"]
+            }
+          }
+        },
+        {
+          "name": "Listar Productos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/inventario",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["inventario"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cajas",
+      "item": [
+        {
+          "name": "Abrir Caja",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cajaId\": 1,\n  \"monto_inicial\": 100.00,\n  \"usuarioId\": 2\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/cajas/abrir",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["cajas", "abrir"]
+            }
+          }
+        },
+        {
+          "name": "Crear Movimiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"EGRESO\",\n  \"monto\": 25.50,\n  \"motivo\": \"Compra de bolsas para empaque\",\n  \"sesion_caja_id\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/cajas/movimiento",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["cajas", "movimiento"]
+            }
+          }
+        },
+        {
+          "name": "Cerrar Caja",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sesion_caja_id\": 1,\n  \"monto_final_real\": 150.00\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/cajas/cerrar",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["cajas", "cerrar"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ventas",
+      "item": [
+        {
+          "name": "Crear Venta",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metodo_pago\": \"EFECTIVO\",\n  \"sesion_caja_id\": 1,\n  \"detalles\": [\n    {\n      \"producto_id\": 1,\n      \"cantidad\": 2,\n      \"precio_unitario\": 50.00\n    },\n    {\n      \"producto_id\": 2,\n      \"cantidad\": 1,\n      \"precio_unitario\": 20.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/ventas",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["ventas"]
+            }
+          }
+        },
+        {
+          "name": "Listar Ventas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/ventas",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["ventas"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agentes",
+      "item": [
+        {
+          "name": "Crear Transaccion Agente",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"banco\": \"TIGO_MONEY\",\n  \"tipo_operacion\": \"DEPOSITO\",\n  \"monto\": 1000.00,\n  \"comision_cliente\": 5.00,\n  \"nro_referencia\": \"8827334991\",\n  \"sesion_caja_id\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/agentes",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["agentes"]
+            }
+          }
+        },
+        {
+          "name": "Listar Transacciones",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/agentes",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["agentes"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+[
+  {
+    "method": "POST",
+    "path": "/inventario",
+    "description": "Crear un nuevo producto",
+    "body": {
+      "nombre": "Audífonos Bluetooth Sony WH-1000XM4",
+      "codigo_barras": "102030405060",
+      "precio_venta": 120.00,
+      "costo_compra": 70.00,
+      "stock_actual": 15,
+      "stock_minimo": 5,
+      "categoriaId": 1
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/inventario",
+    "description": "Listar todos los productos",
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/inventario/1",
+    "description": "Obtener producto por ID",
+    "body": null
+  },
+  {
+    "method": "PATCH",
+    "path": "/inventario/1",
+    "description": "Actualizar producto (ejemplo actualizando precio y stock)",
+    "body": {
+      "precio_venta": 130.00,
+      "stock_actual": 20
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "/inventario/1",
+    "description": "Eliminar producto por ID",
+    "body": null
+  }
+]

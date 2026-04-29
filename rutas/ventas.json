@@ -1,0 +1,35 @@
+[
+  {
+    "method": "POST",
+    "path": "/ventas",
+    "description": "Crear una nueva venta",
+    "body": {
+      "metodo_pago": "EFECTIVO",
+      "sesion_caja_id": 1,
+      "detalles": [
+        {
+          "producto_id": 1,
+          "cantidad": 2,
+          "precio_unitario": 50.00
+        },
+        {
+          "producto_id": 2,
+          "cantidad": 1,
+          "precio_unitario": 20.00
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/ventas",
+    "description": "Listar todas las ventas realizadas",
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/ventas/1",
+    "description": "Obtener detalles de una venta específica por ID",
+    "body": null
+  }
+]

@@ -1,0 +1,27 @@
+[
+  {
+    "method": "POST",
+    "path": "/agentes",
+    "description": "Crear una transacción de agente",
+    "body": {
+      "banco": "TIGO_MONEY",
+      "tipo_operacion": "DEPOSITO",
+      "monto": 1000.00,
+      "comision_cliente": 5.00,
+      "nro_referencia": "8827334991",
+      "sesion_caja_id": 1
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/agentes",
+    "description": "Listar todas las transacciones de agentes",
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/agentes/1",
+    "description": "Obtener detalle de una transacción de agente por ID",
+    "body": null
+  }
+]
