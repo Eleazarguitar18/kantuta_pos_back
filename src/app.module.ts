@@ -18,6 +18,8 @@ import { InventarioModule } from './inventario/inventario.module';
 import { CajasModule } from './cajas/cajas.module';
 import { VentasModule } from './ventas/ventas.module';
 import { AgentesModule } from './agentes/agentes.module';
+import { ComprasModule } from './compras/compras.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -36,6 +38,7 @@ import { AgentesModule } from './agentes/agentes.module';
     CajasModule,
     VentasModule,
     AgentesModule,
+    ComprasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

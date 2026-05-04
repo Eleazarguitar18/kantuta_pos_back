@@ -10,5 +10,6 @@ import { MovimientoCaja } from './entities/movimiento-caja.entity';
   imports: [TypeOrmModule.forFeature([Caja, SesionCaja, MovimientoCaja])],
   controllers: [CajasController],
   providers: [CajasService],
+  exports: [CajasService],
 })
 export class CajasModule {}
