@@ -15,7 +15,7 @@ export class InventarioService {
     private readonly productoRepository: Repository<Producto>,
     @InjectRepository(Categoria)
     private readonly categoriaRepository: Repository<Categoria>,
-  ) {}
+  ) { }
 
   async create(crearProductoDto: CrearProductoDto): Promise<Producto> {
     const { id_categoria, ...productoData } = crearProductoDto;
@@ -41,6 +41,9 @@ export class InventarioService {
     return await this.productoRepository.find({
       where: { estado: true },
       relations: ['categoria'],
+      order: {
+        id: 'DESC',
+      },
     });
   }
 
@@ -110,6 +113,9 @@ export class InventarioService {
   async findAllCategorias(): Promise<Categoria[]> {
     return await this.categoriaRepository.find({
       where: { estado: true },
+      order: {
+        id: 'DESC',
+      },
     });
   }
 

@@ -5,10 +5,10 @@ import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiBearerAuth()
-@ApiTags('inventario')
-@Controller('inventario')
+@ApiTags('productos')
+@Controller('productos')
 export class InventarioController {
-  constructor(private readonly inventarioService: InventarioService) {}
+  constructor(private readonly inventarioService: InventarioService) { }
 
   @Post()
   @ApiOperation({ summary: 'Crear un nuevo producto en inventario' })

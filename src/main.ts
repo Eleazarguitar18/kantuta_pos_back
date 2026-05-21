@@ -3,15 +3,19 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import morgan from 'morgan';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(morgan('dev'));
   const config = new DocumentBuilder()
     .setTitle('Kantuta POS API')
     .setDescription('The kantuta pos api description')
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('users')
+    .addTag('products')
+    .addTag('categories')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);

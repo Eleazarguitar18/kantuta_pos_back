@@ -35,4 +35,11 @@ export class CrearProductoDto {
   @ApiProperty({ example: 1, description: 'ID de la categoría a la que pertenece' })
   @IsInt()
   id_categoria: number;
+  @ApiProperty({ example: 1 })
+  @IsNotEmpty()
+  id_user_create: number;
+
+  @ApiProperty({ example: 1 })
+  @IsOptional()
+  id_user_update?: number;
 }
