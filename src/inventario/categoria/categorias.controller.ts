@@ -7,16 +7,16 @@ import {
   Param,
   Delete,
 } from '@nestjs/common';
-import { InventarioService } from './inventario.service';
-import { CrearCategoriaDto } from './dto/crear-categoria.dto';
-import { ActualizarCategoriaDto } from './dto/actualizar-categoria.dto';
+import { InventarioService } from '../inventario.service';
+import { CrearCategoriaDto } from '../dto/crear-categoria.dto';
+import { ActualizarCategoriaDto } from '../dto/actualizar-categoria.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiBearerAuth()
-@ApiTags('categorías')
-@Controller('categorias')
+@ApiTags('inventario/categorias')
+@Controller('inventario/categorias')
 export class CategoriasController {
-  constructor(private readonly inventarioService: InventarioService) {}
+  constructor(private readonly inventarioService: InventarioService) { }
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva categoría' })
