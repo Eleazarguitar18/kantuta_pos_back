@@ -8,11 +8,12 @@ import { Categoria } from './entities/categoria.entity';
 import { ProductoController } from './producto/producto.controller';
 import { ProductoService } from './producto/producto.service';
 import { CategoriaService } from './categoria/categoria.service';
+import { AppGateway } from 'src/gateway/app.gateway';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Producto, Categoria])],
   controllers: [InventarioController, CategoriasController, ProductoController],
-  providers: [InventarioService, CategoriaService, ProductoService],
+  providers: [InventarioService, CategoriaService, ProductoService, AppGateway],
   exports: [InventarioService, CategoriaService, ProductoService],
 })
 export class InventarioModule { }

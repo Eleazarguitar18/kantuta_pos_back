@@ -19,6 +19,7 @@ import { CajasModule } from './cajas/cajas.module';
 import { VentasModule } from './ventas/ventas.module';
 import { AgentesModule } from './agentes/agentes.module';
 import { ComprasModule } from './compras/compras.module';
+import { AppGateway } from './gateway/app.gateway';
 
 @Module({
   imports: [
@@ -41,6 +42,6 @@ import { ComprasModule } from './compras/compras.module';
     ComprasModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AppGateway],
 })
 export class AppModule { }
