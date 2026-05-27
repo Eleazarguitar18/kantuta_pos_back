@@ -248,11 +248,11 @@ Envía un correo con un código de recuperación temporal de 6 caracteres (durac
 
 ---
 
-## 🗂️ Módulo 2: Categorías (`/categorias`)
+## 🗂️ Módulo 2: Categorías (`/inventario/categorias`)
 
 ### 1. Crear Categoría
 *   **Método:** `POST`
-*   **Ruta:** `/categorias`
+*   **Ruta:** `/inventario/categorias`
 *   **Cuerpo:**
     ```typescript
     interface CrearCategoriaRequest {
@@ -264,17 +264,17 @@ Envía un correo con un código de recuperación temporal de 6 caracteres (durac
 
 ### 2. Listar Categorías
 *   **Método:** `GET`
-*   **Ruta:** `/categorias`
+*   **Ruta:** `/inventario/categorias`
 *   **Respuesta:** `Categoria[]` (filtra categorías inactivas automáticamente).
 
 ### 3. Obtener Categoría por ID
 *   **Método:** `GET`
-*   **Ruta:** `/categorias/:id`
+*   **Ruta:** `/inventario/categorias/:id`
 *   **Respuesta:** `Categoria`
 
 ### 4. Actualizar Categoría
 *   **Método:** `PATCH`
-*   **Ruta:** `/categorias/:id`
+*   **Ruta:** `/inventario/categorias/:id`
 *   **Cuerpo:**
     ```typescript
     interface ActualizarCategoriaRequest {
@@ -286,16 +286,16 @@ Envía un correo con un código de recuperación temporal de 6 caracteres (durac
 
 ### 5. Eliminar Categoría (Soft Delete)
 *   **Método:** `DELETE`
-*   **Ruta:** `/categorias/:id`
+*   **Ruta:** `/inventario/categorias/:id`
 *   **Respuesta:** `void` (HTTP 200/204, cambia `estado` a `false`).
 
 ---
 
-## 🍎 Módulo 3: Inventario / Productos (`/inventario`)
+## 🍎 Módulo 3: Inventario / Productos (`/inventario/producto`)
 
 ### 1. Crear Producto en Inventario
 *   **Método:** `POST`
-*   **Ruta:** `/inventario`
+*   **Ruta:** `/inventario/producto`
 *   **Cuerpo:**
     ```typescript
     interface CrearProductoRequest {
@@ -312,17 +312,17 @@ Envía un correo con un código de recuperación temporal de 6 caracteres (durac
 
 ### 2. Listar Productos
 *   **Método:** `GET`
-*   **Ruta:** `/inventario`
+*   **Ruta:** `/inventario/producto`
 *   **Respuesta:** `Producto[]` (con la propiedad `categoria` precargada).
 
 ### 3. Obtener Producto por ID
 *   **Método:** `GET`
-*   **Ruta:** `/inventario/:id`
+*   **Ruta:** `/inventario/producto/:id`
 *   **Respuesta:** `Producto`
 
 ### 4. Actualizar Producto
 *   **Método:** `PATCH`
-*   **Ruta:** `/inventario/:id`
+*   **Ruta:** `/inventario/producto/:id`
 *   **Cuerpo:**
     ```typescript
     // Todos los campos de creación son opcionales para el update
@@ -341,7 +341,7 @@ Envía un correo con un código de recuperación temporal de 6 caracteres (durac
 
 ### 5. Eliminar Producto (Soft Delete)
 *   **Método:** `DELETE`
-*   **Ruta:** `/inventario/:id`
+*   **Ruta:** `/inventario/producto/:id`
 *   **Respuesta:** `void` (Cambia `estado` a `false`).
 
 ---
@@ -743,7 +743,7 @@ import api from './api';
 import { Producto, CrearProductoRequest } from './types';
 
 export const crearProducto = async (data: CrearProductoRequest): Promise<Producto> => {
-  const response = await api.post<Producto>('/inventario', data);
+  const response = await api.post<Producto>('/inventario/producto', data);
   return response.data;
 };
 ```
