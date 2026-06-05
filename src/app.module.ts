@@ -19,7 +19,11 @@ import { CajasModule } from './cajas/cajas.module';
 import { VentasModule } from './ventas/ventas.module';
 import { AgentesModule } from './agentes/agentes.module';
 import { ComprasModule } from './compras/compras.module';
+import { RecargasModule } from './recargas/recargas.module';
+import { ReportesModule } from './reportes/reportes.module';
 import { AppGateway } from './gateway/app.gateway';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { GeminiModule } from './gemini/gemini.module';
 
 @Module({
   imports: [
@@ -40,6 +44,10 @@ import { AppGateway } from './gateway/app.gateway';
     VentasModule,
     AgentesModule,
     ComprasModule,
+    RecargasModule,
+    ReportesModule,
+    WhatsappModule,
+    GeminiModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppGateway],
