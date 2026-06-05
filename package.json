@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "@keyv/redis": "^5.1.6",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/cache-manager": "^3.1.0",
@@ -33,6 +34,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.1.23",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cache-manager": "^7.2.8",
@@ -41,9 +43,12 @@
     "graphology": "^0.26.0",
     "graphology-shortest-path": "^2.1.0",
     "handlebars": "^4.7.8",
+    "jimp": "^1.6.1",
     "morgan": "^1.10.1",
     "nodemailer": "^8.0.1",
     "pg": "^8.16.3",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.9.3",
     "rxjs": "^7.8.1",
