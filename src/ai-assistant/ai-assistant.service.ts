@@ -1,39 +1,42 @@
 import { Injectable } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai'; // Librería instalada
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class AiAssistantService {
-  private ai: GoogleGenAI;
-  // En tu AiAssistantService.ts
-  private readonly systemInstruction = `
-  Eres KANTU, el asistente oficial de KANTUTA POS. 
-  Tu objetivo es ayudar a los usuarios a gestionar ventas, inventario y reportes.
-  
-  REGLAS ESTRICTAS:
-  1. Si te preguntan algo que no sea sobre el sistema POS o gestión de negocios, responde amablemente que solo puedes hablar de temas relacionados con KANTUTA POS.
-  2. Nunca inventes precios o datos de stock; si no tienes la información, dile al usuario que consulte directamente en el panel administrativo.
-  3. Tu tono es profesional, amable y directo.
-  4. Mantén tus respuestas cortas y útiles.
-`;
+  private openai: OpenAI;
+  private systemInstruction: string;
+
   constructor() {
-    // Inicializamos con la API Key que debes tener en tu .env
-    this.ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+    // Configuración para Groq
+    this.openai = new OpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY, // Asegúrate de tener esto en tu .env
+    });
+
+    const promptPath = path.join(
+      process.cwd(),
+      'src/ai-assistant/prompts/kantuta.promt.md',
+    );
+    this.systemInstruction = fs.readFileSync(promptPath, 'utf8');
   }
 
   async procesarConsulta(texto: string): Promise<string> {
     try {
-      const interaction = await this.ai.interactions.create({
-        model: 'gemini-3.5-flash',
-        input: texto,
-        system_instruction: this.systemInstruction,
+      const completion = await this.openai.chat.completions.create({
+        // Puedes cambiar este modelo por cualquiera de los disponibles en Groq
+        model: 'groq/compound-mini',
+        messages: [
+          { role: 'system', content: this.systemInstruction },
+          { role: 'user', content: texto },
+        ],
       });
-      if (!interaction.output_text) {
-        return 'No se pudo obtener respuesta';
-      }
-      return interaction.output_text;
+
+      return completion.choices[0].message.content || 'Sin respuesta';
     } catch (error) {
-      console.error('Error en AiAssistantService:', error);
-      return 'Hubo un error al procesar tu solicitud.';
+      console.error('Error con Groq:', error);
+      return 'KANTUTA está teniendo problemas técnicos. Intenta de nuevo.';
     }
   }
 }
