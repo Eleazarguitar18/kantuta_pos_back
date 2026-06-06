@@ -13,6 +13,7 @@ import makeWASocket, {
 import * as QRCodeNode from 'qrcode';
 import pino = require('pino');
 import { Jimp } from 'jimp';
+import { AiAssistantService } from 'src/ai-assistant/ai-assistant.service';
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private sock: WASocket | null = null;
@@ -22,7 +23,7 @@ export class WhatsappService implements OnModuleInit {
   async onModuleInit() {
     await this.conectarWhatsapp();
   }
-
+  constructor(private readonly aiAssistantService: AiAssistantService) {}
   private async conectarWhatsapp() {
     const folderName = process.env.AUTH_FOLDER_NAME || 'auth_info_baileys';
 
@@ -72,8 +73,66 @@ export class WhatsappService implements OnModuleInit {
         );
       }
     });
+    // --- NUEVO: ESCUCHAR MENSAJES ENTRANTES ---
+    this.sock.ev.on('messages.upsert', async (m) => {
+      if (m.type !== 'notify') return;
+      const msg = m.messages[0];
+
+      // Filtros: solo procesar mensajes de texto y que no sean del bot
+      if (!msg.message || msg.key.fromMe) return;
+      // --- AQUÍ VA LA VALIDACIÓN DE TIEMPO ---
+      const msgTimestamp = msg.messageTimestamp;
+      const now = Math.floor(Date.now() / 1000);
+
+      // Si el mensaje es más viejo de 60 segundos, lo ignoramos para no saturar
+      if (msgTimestamp && now - Number(msgTimestamp) > 60) {
+        console.log(`[IA] Ignorando mensaje antiguo de ${msg.key.remoteJid}`);
+        return;
+      }
+      // ----------------------------------------
+      const remoteJid = msg.key.remoteJid;
+      const texto =
+        msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+      if (remoteJid?.endsWith('@g.us')) {
+        console.log(`[BLOCK] Mensaje de grupo ignorado: ${remoteJid}`);
+        return;
+      }
+      if (texto) {
+        console.log(`[IA] recibiendo mensaje de ${remoteJid}: ${texto}`);
+        await this.enviarEstadoEscribiendo(remoteJid as string);
+        console.log(`[IA] Activando animación de escritura para ${remoteJid}`);
+        // 1. Llamamos a nuestra IA
+        const respuesta = await this.aiAssistantService.procesarConsulta(texto);
+        console.log(`[IA] respondiendo a ${remoteJid}: ${respuesta}`);
+        // 2. Respondemos por WhatsApp
+        await this.enviarRespuestaIA(remoteJid as string, respuesta);
+        console.log(
+          `🤖 IA respondió a ${remoteJid}: Mensaje entregado con éxito.`,
+        );
+      }
+    });
+    // ------------------------------------------
+  }
+  async enviarRespuestaIA(jid: string, message: string) {
+    if (!this.sock) {
+      throw new ServiceUnavailableException(
+        'El cliente de WhatsApp no está inicializado.',
+      );
+    }
+
+    // Aquí enviamos el jid tal cual llega (incluyendo @lid)
+    console.log(`🤖 Enviando respuesta de IA a: ${jid}`);
+
+    return await this.sock.sendMessage(jid, { text: message });
   }
 
+  async enviarEstadoEscribiendo(jid: string) {
+    if (!this.sock) return;
+
+    // 'composing' es el estado que muestra "Escribiendo..."
+    await this.sock.sendPresenceUpdate('composing', jid);
+  }
   // Método para obtener el QR en formato Base64 para la vista web
   async obtenerQrHtml(): Promise<string | null> {
     if (!this.ultimoQr) return null;

@@ -24,6 +24,7 @@ import { ReportesModule } from './reportes/reportes.module';
 import { AppGateway } from './gateway/app.gateway';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GeminiModule } from './gemini/gemini.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { GeminiModule } from './gemini/gemini.module';
     ReportesModule,
     WhatsappModule,
     GeminiModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppGateway],
