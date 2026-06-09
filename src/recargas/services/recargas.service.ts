@@ -77,9 +77,10 @@ export class RecargasService {
         throw new BadRequestException('La sesión de caja está cerrada. No se permiten transacciones.');
       }
 
-      // 2. Validar Proveedor
+      // 2. Validar Proveedor con Bloqueo Pesimista
       const proveedor = await queryRunner.manager.findOne(RecargaProveedor, {
         where: { id: dto.id_proveedor, estado: true },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!proveedor) throw new NotFoundException(`Proveedor de recarga con ID ${dto.id_proveedor} no encontrado`);
 
