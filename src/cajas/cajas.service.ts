@@ -50,8 +50,9 @@ export class CajasService {
     return this.cajaRepository.save(updatedCaja);
   }
 
-  async abrirCaja(abrirCajaDto: AbrirCajaDto): Promise<SesionCaja> {
-    const { id_caja, monto_inicial, id_usuario, id_user_create } = abrirCajaDto;
+  async abrirCaja(abrirCajaDto: AbrirCajaDto, userRole?: string): Promise<SesionCaja> {
+    const { id_caja, id_usuario, id_user_create } = abrirCajaDto;
+    let { monto_inicial } = abrirCajaDto;
 
     const caja = await this.cajaRepository.findOneBy({
       id: id_caja,
@@ -68,6 +69,24 @@ export class CajasService {
 
     if (sesionAbierta) {
       throw new BadRequestException(`La caja ya tiene una sesión abierta`);
+    }
+
+    const lastSession = await this.sesionCajaRepository.findOne({
+      where: { id_caja },
+      order: { id: 'DESC' },
+    });
+
+    if (userRole === 'Operador') {
+      monto_inicial = lastSession 
+        ? (lastSession.monto_final_real ?? lastSession.monto_final_teorico ?? 0) 
+        : (caja.monto_creacion ?? 0);
+    } else {
+      // Si el admin no mandó monto_inicial para corrección, se hereda normalmente
+      if (monto_inicial === undefined || monto_inicial === null) {
+        monto_inicial = lastSession 
+          ? (lastSession.monto_final_real ?? lastSession.monto_final_teorico ?? 0) 
+          : (caja.monto_creacion ?? 0);
+      }
     }
 
     const sesion = this.sesionCajaRepository.create({

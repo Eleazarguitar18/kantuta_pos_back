@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsInt, Min, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsInt, Min, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class AbrirCajaDto {
   @ApiProperty({ example: 1, description: 'ID de la caja física seleccionada' })
@@ -7,10 +7,11 @@ export class AbrirCajaDto {
   @IsNotEmpty()
   id_caja: number;
 
-  @ApiProperty({ example: 100.00, description: 'Monto con el que se inicia la caja' })
+  @ApiProperty({ example: 100.00, description: 'Monto con el que se inicia la caja (opcional para Operadores)' })
   @IsNumber()
   @Min(0)
-  monto_inicial: number;
+  @IsOptional()
+  monto_inicial?: number;
 
   @ApiProperty({ example: 2, description: 'ID del cajero que inicia sesión' })
   @IsInt()

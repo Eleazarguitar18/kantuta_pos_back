@@ -96,6 +96,7 @@ export class AuthService {
       sub: user.id,
       username: user.name,
       roleName: user.role?.nombre || 'user',
+      roleId: user.role?.id || 2,
     };
     const access_token = await this.jwtService.signAsync(payload, {
       secret: this.configService.get('JWT_SECRET'),

@@ -44,6 +44,7 @@
     "graphology-shortest-path": "^2.1.0",
     "groq-sdk": "^1.2.1",
     "handlebars": "^4.7.8",
+    "html-pdf-node": "^1.0.8",
     "jimp": "^1.6.1",
     "morgan": "^1.10.1",
     "nodemailer": "^8.0.1",

@@ -10,149 +10,154 @@ import { Categoria } from './entities/categoria.entity';
 
 @Injectable()
 export class InventarioService {
-  // constructor(
-  //   @InjectRepository(Producto)
-  //   private readonly productoRepository: Repository<Producto>,
-  //   @InjectRepository(Categoria)
-  //   private readonly categoriaRepository: Repository<Categoria>,
-  // ) { }
+  constructor(
+    @InjectRepository(Producto)
+    private readonly productoRepository: Repository<Producto>,
+    @InjectRepository(Categoria)
+    private readonly categoriaRepository: Repository<Categoria>,
+  ) { }
 
-  // async create(crearProductoDto: CrearProductoDto): Promise<Producto> {
-  //   const { id_categoria, ...productoData } = crearProductoDto;
+  async create(crearProductoDto: CrearProductoDto): Promise<Producto> {
+    const { id_categoria, ...productoData } = crearProductoDto;
 
-  //   const categoria = await this.categoriaRepository.findOne({
-  //     where: { id: id_categoria, estado: true },
-  //   });
-  //   if (!categoria) {
-  //     throw new NotFoundException(
-  //       `Categoría con id ${id_categoria} no encontrada o inactiva`,
-  //     );
-  //   }
+    const categoria = await this.categoriaRepository.findOne({
+      where: { id: id_categoria, estado: true },
+    });
+    if (!categoria) {
+      throw new NotFoundException(
+        `Categoría con id ${id_categoria} no encontrada o inactiva`,
+      );
+    }
 
-  //   const producto = this.productoRepository.create({
-  //     ...productoData,
-  //     categoria,
-  //   });
+    if (!productoData.codigo_barras) {
+      const count = await this.productoRepository.count();
+      productoData.codigo_barras = `PROD-${(count + 1).toString().padStart(5, '0')}`;
+    }
 
-  //   return await this.productoRepository.save(producto);
-  // }
+    const producto = this.productoRepository.create({
+      ...productoData,
+      categoria,
+    });
 
-  // async findAll(): Promise<Producto[]> {
-  //   return await this.productoRepository.find({
-  //     where: { estado: true },
-  //     relations: ['categoria'],
-  //     order: {
-  //       id: 'DESC',
-  //     },
-  //   });
-  // }
+    return await this.productoRepository.save(producto);
+  }
 
-  // async findOne(id: number): Promise<Producto> {
-  //   const producto = await this.productoRepository.findOne({
-  //     where: { id, estado: true },
-  //     relations: ['categoria'],
-  //   });
+  async findAll(): Promise<Producto[]> {
+    return await this.productoRepository.find({
+      where: { estado: true },
+      relations: ['categoria'],
+      order: {
+        id: 'DESC',
+      },
+    });
+  }
 
-  //   if (!producto) {
-  //     throw new NotFoundException(
-  //       `Producto con id ${id} no encontrado o inactivo`,
-  //     );
-  //   }
+  async findOne(id: number): Promise<Producto> {
+    const producto = await this.productoRepository.findOne({
+      where: { id, estado: true },
+      relations: ['categoria'],
+    });
 
-  //   return producto;
-  // }
+    if (!producto) {
+      throw new NotFoundException(
+        `Producto con id ${id} no encontrado o inactivo`,
+      );
+    }
 
-  // async update(
-  //   id: number,
-  //   actualizarProductoDto: ActualizarProductoDto,
-  // ): Promise<Producto> {
-  //   const { id_categoria, ...updateData } = actualizarProductoDto;
+    return producto;
+  }
 
-  //   const producto = await this.productoRepository.preload({
-  //     id,
-  //     ...updateData,
-  //   });
+  async update(
+    id: number,
+    actualizarProductoDto: ActualizarProductoDto,
+  ): Promise<Producto> {
+    const { id_categoria, ...updateData } = actualizarProductoDto;
 
-  //   if (!producto || !producto.estado) {
-  //     throw new NotFoundException(
-  //       `Producto con id ${id} no encontrado o inactivo`,
-  //     );
-  //   }
+    const producto = await this.productoRepository.preload({
+      id,
+      ...updateData,
+    });
 
-  //   if (id_categoria) {
-  //     const categoria = await this.categoriaRepository.findOne({
-  //       where: { id: id_categoria, estado: true },
-  //     });
-  //     if (!categoria) {
-  //       throw new NotFoundException(
-  //         `Categoría con id ${id_categoria} no encontrada o inactiva`,
-  //       );
-  //     }
-  //     producto.categoria = categoria;
-  //   }
+    if (!producto || !producto.estado) {
+      throw new NotFoundException(
+        `Producto con id ${id} no encontrado o inactivo`,
+      );
+    }
 
-  //   return await this.productoRepository.save(producto);
-  // }
+    if (id_categoria) {
+      const categoria = await this.categoriaRepository.findOne({
+        where: { id: id_categoria, estado: true },
+      });
+      if (!categoria) {
+        throw new NotFoundException(
+          `Categoría con id ${id_categoria} no encontrada o inactiva`,
+        );
+      }
+      producto.categoria = categoria;
+    }
 
-  // async remove(id: number, id_user_update?: number): Promise<void> {
-  //   const producto = await this.findOne(id);
-  //   producto.estado = false;
-  //   producto.id_user_update = id_user_update;
-  //   await this.productoRepository.save(producto);
-  // }
+    return await this.productoRepository.save(producto);
+  }
 
-  // // --- MÉTODOS PARA CATEGORÍAS ---
+  async remove(id: number, id_user_update?: number): Promise<void> {
+    const producto = await this.findOne(id);
+    producto.estado = false;
+    producto.id_user_update = id_user_update;
+    await this.productoRepository.save(producto);
+  }
 
-  // async createCategoria(
-  //   crearCategoriaDto: CrearCategoriaDto,
-  // ): Promise<Categoria> {
-  //   const nuevaCategoria = this.categoriaRepository.create(crearCategoriaDto);
-  //   return await this.categoriaRepository.save(nuevaCategoria);
-  // }
+  // --- MÉTODOS PARA CATEGORÍAS ---
 
-  // async findAllCategorias(): Promise<Categoria[]> {
-  //   return await this.categoriaRepository.find({
-  //     where: { estado: true },
-  //     order: {
-  //       id: 'DESC',
-  //     },
-  //   });
-  // }
+  async createCategoria(
+    crearCategoriaDto: CrearCategoriaDto,
+  ): Promise<Categoria> {
+    const nuevaCategoria = this.categoriaRepository.create(crearCategoriaDto);
+    return await this.categoriaRepository.save(nuevaCategoria);
+  }
 
-  // async findOneCategoria(id: number): Promise<Categoria> {
-  //   const categoria = await this.categoriaRepository.findOne({
-  //     where: { id, estado: true },
-  //   });
-  //   if (!categoria) {
-  //     throw new NotFoundException(
-  //       `Categoría con id ${id} no encontrada o inactiva`,
-  //     );
-  //   }
-  //   return categoria;
-  // }
+  async findAllCategorias(): Promise<Categoria[]> {
+    return await this.categoriaRepository.find({
+      where: { estado: true },
+      order: {
+        id: 'DESC',
+      },
+    });
+  }
 
-  // async updateCategoria(
-  //   id: number,
-  //   actualizarCategoriaDto: ActualizarCategoriaDto,
-  // ): Promise<Categoria> {
-  //   const categoria = await this.categoriaRepository.preload({
-  //     id,
-  //     ...actualizarCategoriaDto,
-  //   });
+  async findOneCategoria(id: number): Promise<Categoria> {
+    const categoria = await this.categoriaRepository.findOne({
+      where: { id, estado: true },
+    });
+    if (!categoria) {
+      throw new NotFoundException(
+        `Categoría con id ${id} no encontrada o inactiva`,
+      );
+    }
+    return categoria;
+  }
 
-  //   if (!categoria) {
-  //     throw new NotFoundException(
-  //       `Categoría con id ${id} no encontrada o inactiva`,
-  //     );
-  //   }
+  async updateCategoria(
+    id: number,
+    actualizarCategoriaDto: ActualizarCategoriaDto,
+  ): Promise<Categoria> {
+    const categoria = await this.categoriaRepository.preload({
+      id,
+      ...actualizarCategoriaDto,
+    });
 
-  //   return await this.categoriaRepository.save(categoria);
-  // }
+    if (!categoria) {
+      throw new NotFoundException(
+        `Categoría con id ${id} no encontrada o inactiva`,
+      );
+    }
 
-  // async removeCategoria(id: number, id_user_update?: number): Promise<void> {
-  //   const categoria = await this.findOneCategoria(id);
-  //   categoria.estado = false;
-  //   categoria.id_user_update = id_user_update;
-  //   await this.categoriaRepository.save(categoria);
-  // }
+    return await this.categoriaRepository.save(categoria);
+  }
+
+  async removeCategoria(id: number, id_user_update?: number): Promise<void> {
+    const categoria = await this.findOneCategoria(id);
+    categoria.estado = false;
+    categoria.id_user_update = id_user_update;
+    await this.categoriaRepository.save(categoria);
+  }
 }

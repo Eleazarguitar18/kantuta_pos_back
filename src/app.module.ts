@@ -21,10 +21,12 @@ import { AgentesModule } from './agentes/agentes.module';
 import { ComprasModule } from './compras/compras.module';
 import { RecargasModule } from './recargas/recargas.module';
 import { ReportesModule } from './reportes/reportes.module';
-import { AppGateway } from './gateway/app.gateway';
+
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
+
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
@@ -50,8 +52,9 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
     WhatsappModule,
     GeminiModule,
     AiAssistantModule,
+    GatewayModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AppGateway],
+  providers: [AppService],
 })
 export class AppModule { }

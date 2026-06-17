@@ -7,7 +7,7 @@ export const JwtConfig: JwtModuleAsyncOptions = {
   inject: [ConfigService],
   useFactory: (config: ConfigService) => {
     const secret = config.get<string>('JWT_SECRET');
-    const expiresIn = config.get<string>('JWT_EXPIRES_IN') || '1h';
+    const expiresIn = config.get<string>('JWT_EXPIRES_IN') || '8h';
 
     if (!secret) {
       throw new Error('JWT_SECRET no está definido en las variables de entorno');

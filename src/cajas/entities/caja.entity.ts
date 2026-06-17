@@ -25,6 +25,13 @@ export class Caja extends BaseEntityAudit {
   })
   especialidad: string;
 
+  @ApiProperty({ 
+    example: 500.00, 
+    description: 'Monto inicial inmutable base con el que se crea la caja' 
+  })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  monto_creacion: number;
+
   @OneToMany(() => SesionCaja, (sesion) => sesion.caja)
   sesiones: SesionCaja[];
 }

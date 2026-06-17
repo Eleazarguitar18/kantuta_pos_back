@@ -61,3 +61,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Uploads directory
 auth_info_baileys
+docs_ia

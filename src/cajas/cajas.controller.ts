@@ -7,7 +7,12 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
+import { AuthGuard } from '../auth/guards/auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CajasService } from './cajas.service';
 import { AbrirCajaDto } from './dto/abrir-caja.dto';
 import { CerrarCajaDto } from './dto/cerrar-caja.dto';
@@ -15,6 +20,7 @@ import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
 
+@UseGuards(AuthGuard, RolesGuard)
 @Controller('cajas')
 export class CajasController {
   constructor(private readonly cajasService: CajasService) {}
@@ -24,6 +30,7 @@ export class CajasController {
     return this.cajasService.findAllCajas();
   }
 
+  @Roles('Administrador')
   @Post()
   createCaja(@Body() createCajaDto: CreateCajaDto) {
     return this.cajasService.create(createCajaDto);
@@ -57,9 +64,11 @@ export class CajasController {
     return this.cajasService.softDeleteCaja(+id, +id_user_update);
   }
 
+  @Roles('Administrador', 'Jefe de Tienda', 'Operador')
   @Post('abrir')
-  abrirCaja(@Body() abrirCajaDto: AbrirCajaDto) {
-    return this.cajasService.abrirCaja(abrirCajaDto);
+  abrirCaja(@Body() abrirCajaDto: AbrirCajaDto, @Req() req: any) {
+    const userRole = req.user?.roleName;
+    return this.cajasService.abrirCaja(abrirCajaDto, userRole);
   }
 
   @Patch('sesion/:id/cerrar')

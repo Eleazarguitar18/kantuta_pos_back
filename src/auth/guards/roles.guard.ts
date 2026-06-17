@@ -20,8 +20,16 @@ export class RolesGuard implements CanActivate {
     // Obtenemos el usuario que el JwtAuthGuard inyectó en el request
     const { user } = context.switchToHttp().getRequest();
     
-    // Verificamos si el usuario existe y si su rol está en la lista de permitidos
-    // El campo 'roleName' debe venir en tu JWT Payload
+    // v5.md: ID 1: Administrador (Acceso total absoluto, sin restricciones)
+    if (user && (user.roleId === 1 || user.roleName === 'admin' || user.roleName === 'Administrador')) {
+      return true;
+    }
+
+    // Si es Operador (ID 2 o roleName 'user'), verificamos si 'Operador' está en la lista
+    if (user && (user.roleId === 2 || user.roleName === 'user' || user.roleName === 'Operador')) {
+      return requiredRoles.includes('Operador');
+    }
+
     return user && user.roleName && requiredRoles.includes(user.roleName); 
   }
 }
