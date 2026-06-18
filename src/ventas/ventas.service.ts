@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Between } from 'typeorm';
 import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
 import { CrearVentaDto } from './dto/crear-venta.dto';
@@ -8,6 +12,7 @@ import { ActualizarVentaDto } from './dto/actualizar-venta.dto';
 import { Producto } from '../inventario/entities/producto.entity';
 import { SesionCaja } from '../cajas/entities/sesion-caja.entity';
 import { AppGateway } from '../gateway/app.gateway';
+import { GetReporteVentasDto } from './dto/get-reporte-ventas.dto';
 
 @Injectable()
 export class VentasService {
@@ -20,7 +25,7 @@ export class VentasService {
 
   async create(crearVentaDto: CrearVentaDto): Promise<Venta> {
     const { detalles, ...ventaData } = crearVentaDto;
-    
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -36,11 +41,15 @@ export class VentasService {
         });
 
         if (!producto) {
-          throw new BadRequestException(`Producto con ID ${detalle.id_producto} no encontrado`);
+          throw new BadRequestException(
+            `Producto con ID ${detalle.id_producto} no encontrado`,
+          );
         }
 
         if (producto.stock_actual < detalle.cantidad) {
-          throw new BadRequestException(`Stock insuficiente para el producto ${producto.nombre}. Stock actual: ${producto.stock_actual}`);
+          throw new BadRequestException(
+            `Stock insuficiente para el producto ${producto.nombre}. Stock actual: ${producto.stock_actual}`,
+          );
         }
 
         producto.stock_actual -= detalle.cantidad;
@@ -61,10 +70,14 @@ export class VentasService {
       });
 
       if (!sesionCaja || sesionCaja.estado_sesion !== 'ABIERTA') {
-        throw new BadRequestException(`La sesión de caja con ID ${crearVentaDto.id_sesion_caja} no está abierta o no existe`);
+        throw new BadRequestException(
+          `La sesión de caja con ID ${crearVentaDto.id_sesion_caja} no está abierta o no existe`,
+        );
       }
 
-      sesionCaja.monto_final_teorico = Number(sesionCaja.monto_final_teorico || sesionCaja.monto_inicial) + total;
+      sesionCaja.monto_final_teorico =
+        Number(sesionCaja.monto_final_teorico || sesionCaja.monto_inicial) +
+        total;
       await queryRunner.manager.save(SesionCaja, sesionCaja);
 
       const venta = queryRunner.manager.create(Venta, {
@@ -78,7 +91,7 @@ export class VentasService {
       await queryRunner.commitTransaction();
 
       if (this.appGateway) {
-         this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+        this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
       }
 
       return savedVenta;
@@ -138,5 +151,69 @@ export class VentasService {
     venta.estado = false;
     venta.id_user_update = id_user_update;
     await this.ventaRepository.save(venta);
+  }
+  async obtenerResumenVentasPorRango(queryDto: GetReporteVentasDto) {
+    const { fechaInicio, fechaFin } = queryDto;
+
+    const inicio = new Date(`${fechaInicio}T00:00:00.000Z`);
+    const fin = new Date(`${fechaFin}T23:59:59.999Z`);
+
+    if (inicio > fin) {
+      throw new BadRequestException(
+        'La fecha de inicio no puede ser mayor a la fecha de fin',
+      );
+    }
+
+    // Buscamos las ventas cargando las relaciones si fueran necesarias
+    const ventas = await this.ventaRepository.find({
+      where: {
+        created_at: Between(inicio, fin),
+        estado: true, // Tu borrado lógico/auditoría
+      },
+      order: { id: 'DESC' }, // Listar de las más recientes a las más antiguas
+    });
+
+    // Cálculos de totales acumulados (manteniendo lo que ya hiciste)
+    let totalVendido = 0;
+    let totalEfectivo = 0;
+    let totalQr = 0;
+    let totalTransferencia = 0;
+
+    ventas.forEach((venta) => {
+      const monto = Number(venta.total) || 0;
+      if (venta.estado_venta !== 'ANULADA') {
+        // Evitamos sumar ventas anuladas al total neto si aplica
+        totalVendido += monto;
+        if (venta.metodo_pago === 'EFECTIVO') totalEfectivo += monto;
+        if (venta.metodo_pago === 'QR') totalQr += monto;
+        if (venta.metodo_pago === 'TRANSFERENCIA') totalTransferencia += monto;
+      }
+    });
+
+    return {
+      metadata: {
+        fechaInicio,
+        fechaFin,
+        ejecutadoEn: new Date().toISOString(),
+      },
+      totales: {
+        totalVendido,
+        totalTransacciones: ventas.length,
+        desglose: {
+          efectivo: totalEfectivo,
+          qr: totalQr,
+          transferencia: totalTransferencia,
+          digitalTotal: totalEfectivo + totalQr + totalTransferencia,
+        },
+      },
+      // 👇 RETORNAMOS EL ARREGLO COMPLETO PARA LA TABLA DEL PDF
+      ventas: ventas.map((v) => ({
+        id: v.id,
+        fecha: v.created_at,
+        total: Number(v.total),
+        metodo_pago: v.metodo_pago,
+        estado_venta: v.estado_venta,
+      })),
+    };
   }
 }
