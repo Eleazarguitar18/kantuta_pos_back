@@ -35,10 +35,12 @@ export class VentasService {
       const detallesEntity: any[] = [];
 
       for (const detalle of detalles) {
-        const producto = await queryRunner.manager.findOne(Producto, {
-          where: { id: detalle.id_producto },
-          lock: { mode: 'pessimistic_write' },
-        });
+        // SOLUCIÓN DEFINITIVA: Usamos QueryBuilder con alias explícito 'p'
+        const producto = await queryRunner.manager
+          .createQueryBuilder(Producto, 'p')
+          .where('p.id = :id', { id: detalle.id_producto })
+          .setLock('pessimistic_write', undefined, ['p']) // 👈 Bloquea estrictamente el alias 'p'
+          .getOne();
 
         if (!producto) {
           throw new BadRequestException(
@@ -64,10 +66,15 @@ export class VentasService {
         });
       }
 
-      const sesionCaja = await queryRunner.manager.findOne(SesionCaja, {
-        where: { id: crearVentaDto.id_sesion_caja, estado: true },
-        lock: { mode: 'pessimistic_write' },
-      });
+      // SOLUCIÓN DEFINITIVA: Usamos QueryBuilder con alias explícito 'sc'
+      const sesionCaja = await queryRunner.manager
+        .createQueryBuilder(SesionCaja, 'sc')
+        .where('sc.id = :id AND sc.estado = :estado', {
+          id: crearVentaDto.id_sesion_caja,
+          estado: true,
+        })
+        .setLock('pessimistic_write', undefined, ['sc']) // 👈 Bloquea estrictamente el alias 'sc'
+        .getOne();
 
       if (!sesionCaja || sesionCaja.estado_sesion !== 'ABIERTA') {
         throw new BadRequestException(
@@ -102,7 +109,6 @@ export class VentasService {
       await queryRunner.release();
     }
   }
-
   async findAll(): Promise<Venta[]> {
     return this.ventaRepository.find({
       where: { estado: true },

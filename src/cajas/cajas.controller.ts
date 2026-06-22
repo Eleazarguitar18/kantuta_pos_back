@@ -64,7 +64,7 @@ export class CajasController {
     return this.cajasService.softDeleteCaja(+id, +id_user_update);
   }
 
-  @Roles('Administrador', 'Jefe de Tienda', 'Operador')
+  @Roles('Administrador', 'Operador')
   @Post('abrir')
   abrirCaja(@Body() abrirCajaDto: AbrirCajaDto, @Req() req: any) {
     const userRole = req.user?.roleName;

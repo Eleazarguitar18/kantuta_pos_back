@@ -256,12 +256,15 @@ export class AuthService {
     if (rolesExistentes === 0) {
       console.log('🌱 Sembrando roles en la base de datos...');
       await this.roleRepository.save([
-        { nombre: 'admin', descripcion: 'Administrador con acceso total' },
-        // {
-        //   nombre: 'lider',
-        //   descripcion: 'Líder de grupo con permisos de puntuación',
-        // },
-        { nombre: 'user', descripcion: 'Usuario de grupo, solo lectura' },
+        {
+          nombre: 'Administrador',
+          descripcion: 'Administrador con acceso total',
+        },
+        {
+          nombre: 'Operador',
+          descripcion: 'Operador con permisos de puntuación',
+        },
+        { nombre: 'Usuario', descripcion: 'Usuario de grupo, solo lectura' },
       ]);
       console.log('✅ Roles creados con éxito');
     }
