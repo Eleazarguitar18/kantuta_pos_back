@@ -29,7 +29,9 @@ export class CajasService {
 
   async create(createCajaDto: CreateCajaDto): Promise<Caja> {
     const caja = this.cajaRepository.create(createCajaDto);
-    return this.cajaRepository.save(caja);
+    const saved = await this.cajaRepository.save(caja);
+    this.appGateway.notifyDataChange('caja', 'creada');
+    return saved;
   }
   async getSaldoCajaSesion(idSesion: number): Promise<number> {
     const sesion = await this.sesionCajaRepository.findOne({
@@ -63,7 +65,9 @@ export class CajasService {
   async update(id: number, updateCajaDto: UpdateCajaDto): Promise<Caja> {
     const caja = await this.findCaja(id);
     const updatedCaja = Object.assign(caja, updateCajaDto);
-    return this.cajaRepository.save(updatedCaja);
+    const saved = await this.cajaRepository.save(updatedCaja);
+    this.appGateway.notifyDataChange('caja', 'actualizada');
+    return saved;
   }
 
   async abrirCaja(
@@ -280,5 +284,6 @@ export class CajasService {
     caja.estado = false;
     caja.id_user_update = id_user_update;
     await this.cajaRepository.save(caja);
+    this.appGateway.notifyDataChange('caja', 'eliminada');
   }
 }

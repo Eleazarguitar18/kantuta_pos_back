@@ -5,6 +5,7 @@ import { CrearProductoDto } from '../dto/crear-producto.dto';
 import { ActualizarProductoDto } from '../dto/actualizar-producto.dto';
 import { Producto } from '../entities/producto.entity';
 import { Categoria } from '../entities/categoria.entity';
+import { AppGateway } from 'src/gateway/app.gateway';
 
 @Injectable()
 export class ProductoService {
@@ -13,6 +14,7 @@ export class ProductoService {
         private readonly productoRepository: Repository<Producto>,
         @InjectRepository(Categoria)
         private readonly categoriaRepository: Repository<Categoria>,
+        private readonly appGateway: AppGateway,
     ) { }
     async create(crearProductoDto: CrearProductoDto): Promise<Producto> {
         const { id_categoria, ...productoData } = crearProductoDto;
@@ -31,7 +33,9 @@ export class ProductoService {
             categoria,
         });
 
-        return await this.productoRepository.save(producto);
+        const saved = await this.productoRepository.save(producto);
+        this.appGateway.notifyDataChange('producto', 'creado');
+        return saved;
     }
 
     async findAll(): Promise<Producto[]> {
@@ -88,7 +92,9 @@ export class ProductoService {
             producto.categoria = categoria;
         }
 
-        return await this.productoRepository.save(producto);
+        const saved = await this.productoRepository.save(producto);
+        this.appGateway.notifyDataChange('producto', 'actualizado');
+        return saved;
     }
 
     async remove(id: number, id_user_update?: number): Promise<void> {
@@ -96,5 +102,6 @@ export class ProductoService {
         producto.estado = false;
         producto.id_user_update = id_user_update;
         await this.productoRepository.save(producto);
+        this.appGateway.notifyDataChange('producto', 'eliminado');
     }
 }

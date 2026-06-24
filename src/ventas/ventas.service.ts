@@ -123,6 +123,8 @@ export class VentasService {
       // Notificar al frontend mediante WebSockets para refrescar las insignias o contadores de saldo
       if (this.appGateway) {
         this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+        this.appGateway.notifyDataChange('producto', 'stock_descontado');
+        this.appGateway.notifyDataChange('venta', 'creada');
       }
 
       return savedVenta;

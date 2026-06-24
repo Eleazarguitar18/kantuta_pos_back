@@ -63,7 +63,9 @@ export class CategoriaService {
             );
         }
 
-        return await this.categoriaRepository.save(categoria);
+        const saved = await this.categoriaRepository.save(categoria);
+        this.appGateway.notifyDataChange('category', 'actualizado');
+        return saved;
     }
 
     async removeCategoria(id: number, id_user_update?: number): Promise<void> {
@@ -71,5 +73,6 @@ export class CategoriaService {
         categoria.estado = false;
         categoria.id_user_update = id_user_update;
         await this.categoriaRepository.save(categoria);
+        this.appGateway.notifyDataChange('category', 'eliminado');
     }
 }
