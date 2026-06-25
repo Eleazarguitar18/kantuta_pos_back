@@ -3,129 +3,146 @@ import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportesService } from 'src/reportes/services/reportes.service';
+// 1. IMPORTA AQUÍ TUS OTROS SERVICES SEGÚN VAYAS NECESITANDO
+// import { ProveedoresService } from '../proveedores/proveedores.service'; 
 
 @Injectable()
 export class AiAssistantService {
   private openai: OpenAI;
   private systemInstruction: string;
   private readonly logger = new Logger(AiAssistantService.name);
+  private readonly MODELO_IA = 'llama-3.3-70b-versatile';
 
   constructor(
-    // Inyectamos únicamente tu servicio de reportes existente
     private readonly reportesService: ReportesService,
+    // 2. INYÉCTALOS EN EL CONSTRUCTOR
+    // private readonly proveedoresService: ProveedoresService, 
   ) {
     this.openai = new OpenAI({
-      baseURL: 'https://api.groq.com/openai/v1',
+      baseURL: 'https://api.groq.com/openai/v1', // URL de tu pasarela Groq
       apiKey: process.env.GROQ_API_KEY,
     });
 
-    const promptPath = path.join(
-      process.cwd(),
-      'src/ai-assistant/prompts/kantuta.promt.md',
-    );
+    const promptPath = path.join(process.cwd(), 'src/ai-assistant/prompts/kantuta.promt.md');
     this.systemInstruction = fs.readFileSync(promptPath, 'utf8');
-  }
-
-  /**
-   * Extrae rangos de fechas en formato YYYY-MM-DD a partir de un texto libre
-   */
-  private extraerFechas(texto: string): { inicio: string; fin: string } {
-    const hoy = new Date();
-    const formatoFecha = (d: Date) => d.toISOString().split('T')[0];
-
-    // Expresión regular básica para buscar fechas YYYY-MM-DD
-    const matches = texto.match(/\d{4}-\d{2}-\d{2}/g);
-
-    if (matches && matches.length >= 2) {
-      return { inicio: matches[0], fin: matches[1] };
-    } else if (matches && matches.length === 1) {
-      return { inicio: matches[0], fin: formatoFecha(hoy) };
-    }
-
-    // Por defecto si no encuentra fechas legibles, asume el día de hoy
-    return { inicio: formatoFecha(hoy), fin: formatoFecha(hoy) };
   }
 
   async procesarConsulta(texto: string): Promise<string> {
     try {
-      this.logger.log(`[IA-ASSISTANT] Procesando consulta: "${texto}"`);
+      this.logger.log(`[IA-ASSISTANT] Solicitud: "${texto}"`);
 
-      // 1. PASO DE CLASIFICACIÓN (Detectar qué reporte necesita el usuario)
+      // ==========================================
+      // PASO 1: AGREGAR LA NUEVA INTENCIÓN A LA IA
+      // ==========================================
       const clasificacion = await this.openai.chat.completions.create({
-        model: 'llama3-8b-8192', // Modelo rápido y económico para etiquetar la intención
+        model: this.MODELO_IA,
         messages: [
           {
             role: 'system',
-            content: `Tu única tarea es analizar la consulta del usuario y responder estrictamente con una de estas 4 palabras clave:
-            - DASHBOARD: Si pregunta por estadísticas generales de hoy, ventas de hoy, recargas de hoy, productos más vendidos o stock bajo.
-            - RANGO: Si pide explícitamente reportes de ventas filtrados por fechas, días específicos, meses o rangos temporales.
-            - INVENTARIO: Si pregunta por totales de inventario, costos globales en almacén, precios totales o ganancias proyectadas.
-            - RECHAZAR: Si saluda de forma casual, hace preguntas externas (cocina, tareas, chistes, programación) o temas ajenos a Kantuta POS.
-            No agregues introducciones, explicaciones, ni signos de puntuación. Solo responde con la palabra clave exacta.`,
+            content: `Analiza el mensaje del usuario y clasifícalo respondiendo ÚNICAMENTE con una de estas palabras clave:
+            - DASHBOARD: Métricas de hoy, ventas del día, recargas del día o tops de productos.
+            - RANGO: Reportes de ventas filtrados por fechas o meses pasados.
+            - INVENTARIO: Costos de almacén, stock actual, stock bajo y ganancias proyectadas.
+            - COMPRAS: Inversiones en proveedores o egresos por rango de fechas.
+            - OPERADOR: Rendimiento y ventas por cajero/operador.
+            - PROVEEDORES: Si pregunta por la lista de proveedores, quiénes están registrados o datos de contacto de los mismos.
+            - RECHAZAR: Saludos, despedidas o temas totalmente ajenos al negocio.
+            
+            No uses puntos ni explicaciones. Solo la palabra limpia.`
           },
-          { role: 'user', content: texto },
+          { role: 'user', content: texto }
         ],
         temperature: 0.0,
       });
 
-      const intencion =
-        clasificacion.choices[0].message.content?.trim().toUpperCase() ||
-        'RECHAZAR';
-      this.logger.log(`[IA-ASSISTANT] Intención detectada: ${intencion}`);
+      const intencionLimpia = (clasificacion.choices[0].message.content || '')
+        .toUpperCase()
+        .replace(/[^A-Z]/g, '')
+        .trim();
 
-      // Si la intención es ajena al negocio, cortamos el flujo inmediatamente
-      if (intencion.includes('RECHAZAR')) {
-        return '🤖 *Kantuta AI:* Lo siento, como asistente de *Kantuta POS*, únicamente estoy autorizado para responder consultas relacionadas con la administración, ventas, inventarios y analíticas del negocio.';
+      if (intencionLimpia.includes('RECHAZAR') || intencionLimpia === '') {
+        return this.obtenerMenuPrincipal();
       }
 
-      // 2. OBTENCIÓN DE DATOS REALES SEGÚN LA INTENCIÓN
+      // ==========================================
+      // PASO 2: ENRUTAMIENTO Y OBTENCIÓN DE DATA CRUDA
+      // ==========================================
       let dataCruda: any = null;
       const anioActual = new Date().getFullYear();
+      const { inicio, fin } = this.extraerFechas(texto);
 
-      if (intencion.includes('DASHBOARD')) {
+      // Evaluamos la intención limpia determinada por la IA
+      if (intencionLimpia.includes('DASHBOARD')) {
         dataCruda = await this.reportesService.getDashboardStats(anioActual);
-      } else if (intencion.includes('RANGO')) {
-        const { inicio, fin } = this.extraerFechas(texto);
-        dataCruda = await this.reportesService.getVentasRangoData(
-          inicio,
-          fin,
-          'Asistente_IA',
-        );
-      } else if (intencion.includes('INVENTARIO')) {
-        dataCruda =
-          await this.reportesService.getInventarioData('Asistente_IA');
+      }
+      else if (intencionLimpia.includes('RANGO')) {
+        dataCruda = await this.reportesService.getVentasRangoData(inicio, fin, 'Asistente_IA');
+      }
+      else if (intencionLimpia.includes('INVENTARIO')) {
+        dataCruda = await this.reportesService.getInventarioData('Asistente_IA');
+      }
+      else if (intencionLimpia.includes('COMPRAS')) {
+        dataCruda = await this.reportesService.getComprasRangoData(inicio, fin, 'Asistente_IA');
+      }
+      else if (intencionLimpia.includes('OPERADOR')) {
+        dataCruda = await this.reportesService.getProductividadOperadorData(inicio, fin);
+      }
+      // ---> AQUÍ EJECUTAS EL MÉTODO DE TU OTRO SERVICIO <---
+      else if (intencionLimpia.includes('PROVEEDORES')) {
+        // Ejemplo ficticio: dataCruda = await this.proveedoresService.findAll();
+        dataCruda = [
+          { id: 1, empresa: 'Distribuidora Norte', contacto: 'Juan Pérez', telefono: '71234567', estado: 'Activo' },
+          { id: 2, empresa: 'Almacenes Central', contacto: 'María Gomez', telefono: '76543210', estado: 'Activo' }
+        ];
       }
 
-      // 3. RESPUESTA FINAL (La IA formatea los datos reales de tu base de datos)
+      // ==========================================
+      // PASO 3: REDACCIÓN FINAL (IGUAL DE ESTRICTA)
+      // ==========================================
       const respuestaFinal = await this.openai.chat.completions.create({
-        model: 'llama3-70b-8192', // Modelo grande y preciso para redactar el informe final
+        model: this.MODELO_IA,
         messages: [
           { role: 'system', content: this.systemInstruction },
           {
             role: 'system',
-            content: `DATOS REALES EXTRAÍDOS DEL SISTEMA KANTUTA POS:
+            content: `DATOS REALES EXTRAÍDOS DEL SISTEMA:
             ${JSON.stringify(dataCruda)}
             
-            Instrucciones críticas:
-            - Usa obligatoriamente los datos reales provistos arriba para responder la consulta del usuario.
-            - Responde de forma concisa empleando negritas de markdown y viñetas (bullet points) para lectura rápida en WhatsApp.
-            - Si los datos contienen montos, descríbelos claramente en moneda local.`,
+            PROHIBICIÓN ABSOLUTA DE SALUDOS:
+            - NO saludes bajo ninguna circunstancia.
+            - NO digas "¡Hola!", "Buenas tardes", "Soy Kantu" ni menciones tu nombre al inicio.
+            - Inicia la respuesta DIRECTAMENTE con el desglose de los datos.
+            
+            Instrucciones de formato:
+            - Usa viñetas "•" y palabras clave en *negrita* para WhatsApp.`
           },
-          { role: 'user', content: texto },
+          { role: 'user', content: texto }
         ],
-        temperature: 0.3,
+        temperature: 0.1,
       });
 
-      return (
-        respuestaFinal.choices[0].message.content ||
-        'Sin respuesta en la capa de redacción.'
-      );
+      return respuestaFinal.choices[0].message.content?.trim() || 'Sin datos disponibles.';
+
     } catch (error) {
-      this.logger.error(
-        'Error crítico en el servicio AiAssistantService:',
-        error,
-      );
-      return '⚠️ *Kantuta AI:* Estoy experimentando dificultades técnicas para consultar los reportes en este momento. Por favor, intenta de nuevo en unos minutos.';
+      this.logger.error('Error crítico en el flujo del Asistente:', error);
+      return '⚠️ *Kantu (Kantuta AI)*: Experimentando dificultades técnicas de consulta en este momento.';
     }
+  }
+
+  private obtenerMenuPrincipal(): string {
+    return '🤖 *Kantuta AI*\n*¡Hola soy Kantu!* Estoy listo para asistirte con la administración del negocio en tiempo real. Puedes consultarme:\n\n' +
+      '• *¿Cómo van las ventas de hoy?*\n' +
+      '• *¿Qué proveedores tenemos registrados?*\n' +
+      '• *Resumen del valor total del inventario.*\n' +
+      '• *Rendimiento de ventas por operador.*';
+  }
+
+  private extraerFechas(texto: string): { inicio: string; fin: string } {
+    const hoy = new Date();
+    const formatoFecha = (d: Date) => d.toISOString().split('T')[0];
+    const matches = texto.match(/\d{4}-\d{2}-\d{2}/g);
+    if (matches && matches.length >= 2) return { inicio: matches[0], fin: matches[1] };
+    if (matches && matches.length === 1) return { inicio: matches[0], fin: formatoFecha(hoy) };
+    return { inicio: formatoFecha(hoy), fin: formatoFecha(hoy) };
   }
 }
