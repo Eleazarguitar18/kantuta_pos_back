@@ -248,6 +248,7 @@ export class AuthService {
 
   async onModuleInit() {
     await this.seedRoles();
+    await this.seedUserADmin();
   }
 
   private async seedRoles() {
@@ -267,6 +268,29 @@ export class AuthService {
         { nombre: 'Usuario', descripcion: 'Usuario de grupo, solo lectura' },
       ]);
       console.log('✅ Roles creados con éxito');
+    }
+  }
+  private async seedUserADmin() {
+    const rolesExistentes = await this.userRepository.count();
+
+    if (rolesExistentes === 0) {
+      console.log('🌱 Sembrando usuario administrador en la base de datos...');
+      const passwordHash = await this.encriptar_password('kantuta123+');
+      await this.userRepository.save([
+        {
+          name: 'Sistema Admin',
+          email: 'kanatuta@gmail.com',
+          password: passwordHash,
+          estado: true,
+          nombres: 'Sistema',
+          p_apellido: 'Administrador',
+          s_apellido: 'POS',
+          fecha_nacimiento: '2026-07-01T03:12:25.016Z',
+          genero: 'M',
+          id_role: 1,
+        },
+      ]);
+      console.log('✅ usuario administrador creado con éxito');
     }
   }
   findAllroles() {
