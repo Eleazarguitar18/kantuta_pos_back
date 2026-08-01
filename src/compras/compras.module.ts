@@ -6,11 +6,13 @@ import { Compra } from './entities/compra.entity';
 import { DetalleCompra } from './entities/detalle-compra.entity';
 import { Producto } from 'src/inventario/entities/producto.entity';
 import { CajasModule } from 'src/cajas/cajas.module';
+import { InventarioModule } from 'src/inventario/inventario.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Compra, DetalleCompra, Producto]),
-    CajasModule
+    CajasModule,
+    InventarioModule,
   ],
   controllers: [ComprasController],
   providers: [ComprasService],

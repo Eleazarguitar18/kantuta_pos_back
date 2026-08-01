@@ -6,14 +6,20 @@ import { Producto } from './entities/producto.entity';
 import { Categoria } from './entities/categoria.entity';
 import { CategoriaModule } from './categoria/categoria.module';
 import { ProductoModule } from './producto/producto.module';
+import { StockAlertService } from './stock-alert.service';
+import { WhatsappModule } from 'src/whatsapp/whatsapp.module';
+import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
 
 @Module({
   imports: [
     CategoriaModule,
     TypeOrmModule.forFeature([Producto, Categoria]),
-    ProductoModule],
+    ProductoModule,
+    WhatsappModule,
+    NotificacionesModule,
+  ],
   controllers: [InventarioController],
-  providers: [InventarioService],
-  exports: [InventarioService, CategoriaModule, ProductoModule],
+  providers: [InventarioService, StockAlertService],
+  exports: [InventarioService, StockAlertService, CategoriaModule, ProductoModule],
 })
 export class InventarioModule { }

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Compra } from './entities/compra.entity';
@@ -7,9 +7,12 @@ import { CrearCompraDto } from './dto/crear-compra.dto';
 import { Producto } from 'src/inventario/entities/producto.entity';
 import { CajasService } from 'src/cajas/cajas.service';
 import { TipoMovimiento } from 'src/cajas/dto/crear-movimiento.dto';
+import { StockAlertService } from 'src/inventario/stock-alert.service';
 
 @Injectable()
 export class ComprasService {
+  private readonly logger = new Logger(ComprasService.name);
+
   constructor(
     @InjectRepository(Compra)
     private readonly compraRepository: Repository<Compra>,
@@ -19,6 +22,7 @@ export class ComprasService {
     private readonly productoRepository: Repository<Producto>,
     private readonly cajasService: CajasService,
     private dataSource: DataSource,
+    private readonly stockAlertService: StockAlertService,
   ) {}
 
   async create(crearCompraDto: CrearCompraDto): Promise<Compra> {
@@ -80,6 +84,25 @@ export class ComprasService {
       }
 
       await queryRunner.commitTransaction();
+
+      // --- ALERTA DE STOCK (post-commit): re-evaluar nivel de stock tras reposición ---
+      for (const item of detalles) {
+        try {
+          const productoActualizado = await this.dataSource.manager.findOne(
+            Producto,
+            { where: { id: item.id_producto }, relations: ['categoria'] },
+          );
+          if (productoActualizado) {
+            await this.stockAlertService.evaluarYAlertar(productoActualizado);
+          }
+        } catch (alertErr) {
+          this.logger.error(
+            `Error al evaluar alerta de stock en compra para producto ID ${item.id_producto}: ${alertErr?.message}`,
+          );
+        }
+      }
+      // ---------------------------------------------------------------------------
+
       return compraGuardada;
 
     } catch (err) {

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between } from 'typeorm';
@@ -14,14 +15,18 @@ import { SesionCaja } from '../cajas/entities/sesion-caja.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { GetReporteVentasDto } from './dto/get-reporte-ventas.dto';
 import { Caja } from 'src/cajas/entities/caja.entity';
+import { StockAlertService } from 'src/inventario/stock-alert.service';
 
 @Injectable()
 export class VentasService {
+  private readonly logger = new Logger(VentasService.name);
+
   constructor(
     @InjectRepository(Venta)
     private readonly ventaRepository: Repository<Venta>,
     private readonly dataSource: DataSource,
     private readonly appGateway: AppGateway,
+    private readonly stockAlertService: StockAlertService,
   ) {}
 
   async create(crearVentaDto: CrearVentaDto): Promise<Venta> {
@@ -126,6 +131,27 @@ export class VentasService {
         this.appGateway.notifyDataChange('producto', 'stock_descontado');
         this.appGateway.notifyDataChange('venta', 'creada');
       }
+
+      // --- ALERTA DE STOCK BAJO (post-commit, no afecta la transacción) ---
+      // Re-consultamos los productos actualizados para obtener el stock final
+      // (dentro del queryRunner ya aplicamos el save, pero necesitamos las relaciones)
+      for (const detalle of detalles) {
+        try {
+          const productoActualizado = await this.dataSource.manager.findOne(
+            Producto,
+            { where: { id: detalle.id_producto }, relations: ['categoria'] },
+          );
+          if (productoActualizado) {
+            await this.stockAlertService.evaluarYAlertar(productoActualizado);
+          }
+        } catch (alertErr) {
+          // Un error en WhatsApp nunca debe afectar la venta ya confirmada
+          this.logger.error(
+            `Error al evaluar alerta de stock para producto ID ${detalle.id_producto}: ${alertErr?.message}`,
+          );
+        }
+      }
+      // -------------------------------------------------------------------
 
       return savedVenta;
     } catch (error) {

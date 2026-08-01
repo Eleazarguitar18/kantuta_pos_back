@@ -9,10 +9,14 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   WASocket,
+  fetchLatestBaileysVersion, // 👈 1. Importamos la función oficial
+  Browsers, // 👈 2. Importamos el preset oficial de navegadores
 } from '@whiskeysockets/baileys';
 import * as QRCodeNode from 'qrcode';
 import pino = require('pino');
 import { Jimp } from 'jimp';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AiAssistantService } from 'src/ai-assistant/ai-assistant.service';
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -28,27 +32,39 @@ export class WhatsappService implements OnModuleInit {
     const folderName = process.env.AUTH_FOLDER_NAME || 'auth_info_baileys';
 
     const { state, saveCreds } = await useMultiFileAuthState(folderName);
-    // const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+
+    // Obtener dinámicamente la versión de WhatsApp Web con fallback
+    const { version, isLatest } = await fetchLatestBaileysVersion().catch(
+      () => ({
+        version: [2, 3000, 1015901307] as [number, number, number],
+        isLatest: false,
+      }),
+    );
+
+    console.log(
+      `📡 [NestJS] Conectando con versión de WA Web: v${version.join('.')}`,
+    );
 
     this.sock = makeWASocket({
-      auth: state, // Mantener el estado multifichero de Baileys
+      version, // 👈 Asignamos la versión obtenida
+      auth: state,
       logger: pino({ level: 'silent' }) as any,
-      browser: ['Ubuntu', 'Chrome', '20.0.04'],
-      // v7 TIP: Algunas versiones requieren 'syncFullHistory: false' para no colgarse con chats viejos
+      browser: Browsers.ubuntu('Chrome'), // 👈 Usar el helper nativo de Baileys
       syncFullHistory: false,
     });
 
-    // CONFIGURACIÓN COMPATIBLE V7: Forzamos la resolución asíncrona de las credenciales
     this.sock.ev.on('creds.update', async () => {
       await saveCreds();
     });
 
-    this.sock.ev.on('connection.update', (update) => {
+    this.sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
         this.ultimoQr = qr;
-        console.log('🔄 [NestJS] Nuevo código QR generado.');
+        console.log(
+          '🔄 [NestJS] Nuevo código QR generado. Escanéalo en /whatsapp/connect/view',
+        );
       }
 
       if (connection === 'close') {
@@ -56,10 +72,26 @@ export class WhatsappService implements OnModuleInit {
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
         console.log(
-          `❌ Conexión cerrada (Status: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`,
+          `❌ Conexión cerrada (Status Code: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`,
         );
 
-        if (shouldReconnect) {
+        if (
+          statusCode === DisconnectReason.loggedOut ||
+          statusCode === 401 ||
+          statusCode === 500
+        ) {
+          console.warn(
+            '⚠️ Sesión invalidad por Meta. Limpiando credenciales para forzar nuevo QR...',
+          );
+          this.ultimoQr = null;
+          // Limpiar la carpeta de auth si la sesión expiró o fue deslogueada por Meta
+          const authPath = path.resolve(folderName);
+          if (fs.existsSync(authPath)) {
+            fs.rmSync(authPath, { recursive: true, force: true });
+          }
+          // Volver a reconectar inmediatamente para solicitar nuevo QR
+          setTimeout(() => this.conectarWhatsapp(), 3000);
+        } else if (shouldReconnect) {
           setTimeout(() => this.conectarWhatsapp(), 5000);
         } else {
           this.ultimoQr = null;

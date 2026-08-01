@@ -25,6 +25,7 @@ import { ReportesModule } from './reportes/reportes.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 
 import { GatewayModule } from './gateway/gateway.module';
 
@@ -52,6 +53,7 @@ import { GatewayModule } from './gateway/gateway.module';
     WhatsappModule,
     GeminiModule,
     AiAssistantModule,
+    NotificacionesModule,
     GatewayModule,
   ],
   controllers: [AppController],
