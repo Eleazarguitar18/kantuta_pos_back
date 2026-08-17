@@ -31,35 +31,88 @@ import { Public } from 'src/auth/decorators/auth_public.decorator';
 export class WhatsappController {
   constructor(private readonly whatsappService: WhatsappService) {}
 
-  // 1. GET http://localhost:3000/api/whatsapp/connect (Muestra el QR en el navegador)
+  // 1. GET http://localhost:3000/api/whatsapp/connect/view (Muestra la vista interactiva del QR)
   @Public()
   @Get('connect/view')
   @ApiOperation({
-    summary: 'Visualizar el Código QR',
+    summary: 'Visualizar la pantalla de vinculación de WhatsApp',
     description:
-      'Renderiza el código QR actual de Baileys para vincular tu dispositivo móvil.',
+      'Muestra el estado en tiempo real, el código QR o el botón para desvincular la cuenta.',
   })
   async renderQrPagev2(@Res() res: express.Response) {
+    const status = this.whatsappService.getStatus();
     const qrImage = await this.whatsappService.obtenerQrHtml();
 
-    if (!qrImage) {
-      return res.send(`
-        <div style="text-align: center; font-family: sans-serif; margin-top: 50px;">
-            <h2>✅ WhatsApp está conectado o el código se está generando...</h2>
-        </div>
+    if (status.connected) {
+      res.type('html').send(`
+        <html lang="es">
+        <body style="font-family: sans-serif; text-align: center; background-color: #f0f2f5; padding-top: 50px;">
+            <div style="background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <h1 style="color: #25D366;">✅ WhatsApp Conectado</h1>
+                <p style="color: #555;">La sesión de WhatsApp está activa y funcionando correctamente.</p>
+                <form action="/whatsapp/disconnect" method="POST" style="margin-top: 20px;">
+                    <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; cursor: pointer;">
+                        🚫 Desvincular / Cerrar Sesión
+                    </button>
+                </form>
+            </div>
+        </body>
+        </html>
       `);
+      return;
     }
 
-    return res.send(`
+    if (!qrImage) {
+      res.type('html').send(`
+        <html lang="es">
+        <head><meta http-equiv="refresh" content="3"></head>
+        <body style="font-family: sans-serif; text-align: center; background-color: #f0f2f5; padding-top: 50px;">
+            <div style="background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <h2 style="color: #007bff;">⏳ Generando código QR...</h2>
+                <p style="color: #666;">La página se actualizará automáticamente en 3 segundos.</p>
+                <form action="/whatsapp/disconnect" method="POST" style="margin-top: 15px;">
+                    <button type="submit" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        Reiniciar Sesión
+                    </button>
+                </form>
+            </div>
+        </body>
+        </html>
+      `);
+      return;
+    }
+
+    res.type('html').send(`
       <html lang="es">
+      <head><meta http-equiv="refresh" content="15"></head>
       <body style="font-family: sans-serif; text-align: center; background-color: #f0f2f5; padding-top: 50px;">
           <div style="background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-              <h1 style="color: #128C7E;">Vincular NestJS API</h1>
-              <img src="${qrImage}" style="width: 300px; height: 300px;"/>
+              <h1 style="color: #128C7E;">Vincular WhatsApp API</h1>
+              <p style="color: #555;">Escanea este código QR desde WhatsApp en tu teléfono:</p>
+              <img src="${qrImage}" style="width: 300px; height: 300px; border: 1px solid #ddd; border-radius: 8px;"/>
+              <br/><br/>
+              <form action="/whatsapp/disconnect" method="POST">
+                  <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                      Cancelar / Forzar nuevo QR
+                  </button>
+              </form>
           </div>
       </body>
       </html>
     `);
+    return;
+  }
+
+  @Public()
+  @Post('disconnect')
+  @ApiOperation({
+    summary: 'Desvincular WhatsApp',
+    description: 'Cierra la sesión actual y elimina las credenciales almacenadas.',
+  })
+  async disconnect(@Res() res: express.Response) {
+    await this.whatsappService.desvincular();
+    res.redirect('/whatsapp/connect/view');
+    return;
   }
 
   @Get('connect')
@@ -68,20 +121,22 @@ export class WhatsappController {
     description: 'Renderiza el código QR en Base64 o un mensaje de éxito.',
   })
   async renderQrPage() {
+    const status = this.whatsappService.getStatus();
     const qrImage = await this.whatsappService.obtenerQrHtml();
 
-    if (!qrImage) {
+    if (status.connected) {
       return {
         success: true,
-        message:
-          'WhatsApp ya está vinculado o el código se está generando de fondo...',
+        connected: true,
+        message: 'WhatsApp ya está vinculado y conectado.',
       };
     }
 
-    // Si quieres retornar un JSON limpio en lugar de HTML embebido (Ideal para tu Frontend)
     return {
       success: true,
+      connected: false,
       qrBase64: qrImage,
+      message: qrImage ? 'Código QR disponible' : 'Generando QR...',
     };
   }
   @Public()

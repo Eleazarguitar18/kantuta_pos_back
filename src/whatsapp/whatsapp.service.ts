@@ -9,110 +9,160 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   WASocket,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import * as QRCodeNode from 'qrcode';
 import pino = require('pino');
 import { Jimp } from 'jimp';
 import { AiAssistantService } from 'src/ai-assistant/ai-assistant.service';
+import * as fs from 'fs';
+
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private sock: WASocket | null = null;
   private ultimoQr: string | null = null;
+  private isConnected: boolean = false;
+  private isConnecting: boolean = false;
 
   // Se ejecuta automáticamente al arrancar la aplicación de NestJS
   async onModuleInit() {
     await this.conectarWhatsapp();
   }
+
   constructor(private readonly aiAssistantService: AiAssistantService) {}
+
+  public getStatus() {
+    return {
+      connected: this.isConnected,
+      hasQr: !!this.ultimoQr,
+    };
+  }
+
+  public async desvincular() {
+    const folderName = process.env.AUTH_FOLDER_NAME || 'auth_info_baileys';
+    this.isConnected = false;
+    this.isConnecting = false;
+    this.ultimoQr = null;
+
+    if (this.sock) {
+      try {
+        this.sock.logout();
+        this.sock.end(undefined);
+      } catch (e) {
+        console.error('Error al cerrar socket:', e);
+      }
+      this.sock = null;
+    }
+
+    try {
+      if (fs.existsSync(folderName)) {
+        fs.rmSync(folderName, { recursive: true, force: true });
+        console.log('🧹 Carpeta de credenciales eliminada manualmente.');
+      }
+    } catch (e) {
+      console.error('Error borrando carpeta de sesión:', e);
+    }
+
+    // Reiniciar conexión limpia
+    await this.conectarWhatsapp();
+    return { success: true, message: 'Sesión desvinculada correctamente.' };
+  }
+
   private async conectarWhatsapp() {
+    if (this.isConnecting) return;
+    this.isConnecting = true;
+
     const folderName = process.env.AUTH_FOLDER_NAME || 'auth_info_baileys';
 
-    const { state, saveCreds } = await useMultiFileAuthState(folderName);
-    // const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(folderName);
 
-    this.sock = makeWASocket({
-      auth: state, // Mantener el estado multifichero de Baileys
-      logger: pino({ level: 'silent' }) as any,
-      browser: ['Ubuntu', 'Chrome', '20.0.04'],
-      // v7 TIP: Algunas versiones requieren 'syncFullHistory: false' para no colgarse con chats viejos
-      syncFullHistory: false,
-    });
+      this.sock = makeWASocket({
+        auth: state,
+        logger: pino({ level: 'silent' }) as any,
+        browser: Browsers.ubuntu('Chrome'),
+        printQRInTerminal: true,
+        syncFullHistory: false,
+      });
 
-    // CONFIGURACIÓN COMPATIBLE V7: Forzamos la resolución asíncrona de las credenciales
-    this.sock.ev.on('creds.update', async () => {
-      await saveCreds();
-    });
+      this.sock.ev.on('creds.update', async () => {
+        await saveCreds();
+      });
 
-    this.sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      this.sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
 
-      if (qr) {
-        this.ultimoQr = qr;
-        console.log('🔄 [NestJS] Nuevo código QR generado.');
-      }
-
-      if (connection === 'close') {
-        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        console.log(
-          `❌ Conexión cerrada (Status: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`,
-        );
-
-        if (shouldReconnect) {
-          setTimeout(() => this.conectarWhatsapp(), 5000);
-        } else {
-          this.ultimoQr = null;
+        if (qr) {
+          this.ultimoQr = qr;
+          this.isConnected = false;
+          console.log('🔄 [NestJS] Nuevo código QR generado.');
         }
-      }
 
-      if (connection === 'open') {
-        this.ultimoQr = null;
-        console.log(
-          '✅ [NestJS] ¡Conexión con WhatsApp establecida con éxito!',
-        );
-      }
-    });
-    // --- NUEVO: ESCUCHAR MENSAJES ENTRANTES ---
-    this.sock.ev.on('messages.upsert', async (m) => {
-      if (m.type !== 'notify') return;
-      const msg = m.messages[0];
+        if (connection === 'close') {
+          this.isConnected = false;
+          this.isConnecting = false;
+          const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-      // Filtros: solo procesar mensajes de texto y que no sean del bot
-      if (!msg.message || msg.key.fromMe) return;
-      // --- AQUÍ VA LA VALIDACIÓN DE TIEMPO ---
-      const msgTimestamp = msg.messageTimestamp;
-      const now = Math.floor(Date.now() / 1000);
+          console.log(
+            `❌ Conexión cerrada (Status: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`,
+          );
 
-      // Si el mensaje es más viejo de 60 segundos, lo ignoramos para no saturar
-      if (msgTimestamp && now - Number(msgTimestamp) > 60) {
-        console.log(`[IA] Ignorando mensaje antiguo de ${msg.key.remoteJid}`);
-        return;
-      }
-      // ----------------------------------------
-      const remoteJid = msg.key.remoteJid;
-      const texto =
-        msg.message.conversation || msg.message.extendedTextMessage?.text;
+          if (shouldReconnect) {
+            setTimeout(() => this.conectarWhatsapp(), 5000);
+          } else {
+            this.ultimoQr = null;
+          }
+        }
 
-      if (remoteJid?.endsWith('@g.us')) {
-        console.log(`[BLOCK] Mensaje de grupo ignorado: ${remoteJid}`);
-        return;
-      }
-      if (texto) {
-        console.log(`[IA] recibiendo mensaje de ${remoteJid}: ${texto}`);
-        await this.enviarEstadoEscribiendo(remoteJid as string);
-        console.log(`[IA] Activando animación de escritura para ${remoteJid}`);
-        // 1. Llamamos a nuestra IA
-        const respuesta = await this.aiAssistantService.procesarConsulta(texto);
-        console.log(`[IA] respondiendo a ${remoteJid}: ${respuesta}`);
-        // 2. Respondemos por WhatsApp
-        await this.enviarRespuestaIA(remoteJid as string, respuesta);
-        console.log(
-          `🤖 IA respondió a ${remoteJid}: Mensaje entregado con éxito.`,
-        );
-      }
-    });
-    // ------------------------------------------
+        if (connection === 'open') {
+          this.ultimoQr = null;
+          this.isConnected = true;
+          this.isConnecting = false;
+          console.log(
+            '✅ [NestJS] ¡Conexión con WhatsApp establecida con éxito!',
+          );
+        }
+      });
+
+      // --- ESCUCHAR MENSAJES ENTRANTES ---
+      this.sock.ev.on('messages.upsert', async (m) => {
+        if (m.type !== 'notify') return;
+        const msg = m.messages[0];
+
+        if (!msg.message || msg.key.fromMe) return;
+        const msgTimestamp = msg.messageTimestamp;
+        const now = Math.floor(Date.now() / 1000);
+
+        if (msgTimestamp && now - Number(msgTimestamp) > 60) {
+          console.log(`[IA] Ignorando mensaje antiguo de ${msg.key.remoteJid}`);
+          return;
+        }
+        const remoteJid = msg.key.remoteJid;
+        const texto =
+          msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+        if (remoteJid?.endsWith('@g.us')) {
+          console.log(`[BLOCK] Mensaje de grupo ignorado: ${remoteJid}`);
+          return;
+        }
+
+        if (texto) {
+          console.log(`[IA] recibiendo mensaje de ${remoteJid}: ${texto}`);
+          await this.enviarEstadoEscribiendo(remoteJid as string);
+          console.log(`[IA] Activando animación de escritura para ${remoteJid}`);
+          const respuesta = await this.aiAssistantService.procesarConsulta(texto);
+          console.log(`[IA] respondiendo a ${remoteJid}: ${respuesta}`);
+          await this.enviarRespuestaIA(remoteJid as string, respuesta);
+          console.log(
+            `🤖 IA respondió a ${remoteJid}: Mensaje entregado con éxito.`,
+          );
+        }
+      });
+    } catch (error) {
+      this.isConnecting = false;
+      console.error('Error inicializando Baileys:', error);
+    }
   }
   async enviarRespuestaIA(jid: string, message: string) {
     if (!this.sock) {
