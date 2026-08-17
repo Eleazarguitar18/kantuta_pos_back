@@ -166,14 +166,14 @@ export class VentasService {
   async findAll(): Promise<Venta[]> {
     return this.ventaRepository.find({
       where: { estado: true },
-      relations: ['detalles'],
+      relations: ['detalles', 'detalles.producto'],
     });
   }
 
   async findOne(id: number): Promise<Venta> {
     const venta = await this.ventaRepository.findOne({
       where: { id, estado: true },
-      relations: ['detalles'],
+      relations: ['detalles', 'detalles.producto'],
     });
 
     if (!venta) {

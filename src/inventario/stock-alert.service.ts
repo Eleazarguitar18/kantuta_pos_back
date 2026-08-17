@@ -68,6 +68,12 @@ export class StockAlertService {
 
   private buildMensaje(producto: Producto): string {
     const categoriaNombre = producto.categoria?.nombre ?? 'Sin categoría';
+    const ahora = new Date().toLocaleTimeString('es-BO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+
     return (
       `⚠️ *ALERTA DE STOCK BAJO - KANTUTA POS* ⚠️\n\n` +
       `El siguiente producto ha alcanzado su límite mínimo de inventario:\n\n` +
@@ -75,8 +81,17 @@ export class StockAlertService {
       `📊 *Stock Actual:* ${producto.stock_actual}\n` +
       `🔻 *Stock Mínimo:* ${producto.stock_minimo}\n` +
       `🏷️ *Categoría:* ${categoriaNombre}\n\n` +
-      `Por favor, realizar el reabastecimiento a la brevedad.`
+      `Por favor, realizar el reabastecimiento a la brevedad.\n\n` +
+      `_Reporte generado automáticamente a las ${ahora}_`
     );
+  }
+
+  private getRandomDelay(min = 8000, max = 15000): number {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async enviarAlertas(producto: Producto): Promise<void> {
@@ -93,24 +108,33 @@ export class StockAlertService {
     const mensaje = this.buildMensaje(producto);
 
     this.logger.warn(
-      `🔔 Enviando alerta de stock bajo para: "${producto.nombre}" ` +
+      `🔔 Enviando alerta de stock bajo secuencial para: "${producto.nombre}" ` +
         `(stock: ${producto.stock_actual} / mínimo: ${producto.stock_minimo}) ` +
         `→ ${contactos.length} contacto(s)`,
     );
 
-    const envios = contactos.map(async (contacto) => {
+    // Enviar de forma secuencial con pausas aleatorias (Jittering) para prevenir baneos de WhatsApp
+    for (let index = 0; index < contactos.length; index++) {
+      const contacto = contactos[index];
       const phone = `${contacto.codigo_pais}${contacto.telefono}`;
       try {
-        await this.whatsappService.enviarMensajeTexto(phone, mensaje);
+        const jid = `${phone}@s.whatsapp.net`;
+        await this.whatsappService.enviarMensajeHumanizado(jid, mensaje);
         this.logger.log(`📲 Alerta enviada a ${contacto.nombre} (${phone})`);
       } catch (err) {
         this.logger.error(
           `❌ Error al enviar alerta de stock a ${contacto.nombre} (${phone}): ${err?.message}`,
         );
       }
-    });
 
-    // Enviamos en paralelo; los errores individuales no deben romper el flujo
-    await Promise.allSettled(envios);
+      // Si hay más contactos por notificar, pausamos entre 8 y 15 segundos
+      if (index < contactos.length - 1) {
+        const espera = this.getRandomDelay(8000, 15000);
+        this.logger.log(
+          `⏳ Pausa anti-ráfaga/anti-ban: esperando ${(espera / 1000).toFixed(1)}s antes de notificar al siguiente contacto...`,
+        );
+        await this.delay(espera);
+      }
+    }
   }
 }

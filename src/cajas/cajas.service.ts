@@ -86,6 +86,16 @@ export class CajasService {
         `Caja con id ${id_caja} no encontrada o inactiva`,
       );
 
+    const sesionUsuarioAbierta = await this.sesionCajaRepository.findOne({
+      where: { id_usuario, estado_sesion: 'ABIERTA', estado: true },
+    });
+
+    if (sesionUsuarioAbierta) {
+      throw new BadRequestException(
+        'El usuario ya cuenta con una caja abierta',
+      );
+    }
+
     const sesionAbierta = await this.sesionCajaRepository.findOne({
       where: { id_caja: id_caja, estado_sesion: 'ABIERTA', estado: true },
     });

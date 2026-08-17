@@ -171,7 +171,32 @@ export class WhatsappService implements OnModuleInit {
     return await QRCodeNode.toDataURL(this.ultimoQr);
   }
 
-  // Método de negocio para enviar mensajes (Inyectable en cualquier parte del sistema)
+  private delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async enviarMensajeHumanizado(jid: string, texto: string) {
+    if (!this.sock) {
+      throw new ServiceUnavailableException(
+        'El cliente de WhatsApp no está inicializado.',
+      );
+    }
+
+    // 1. Simular presencia escribiendo
+    await this.sock.sendPresenceUpdate('composing', jid);
+
+    // 2. Tiempo de tipeo simulado proporcional o entre 2.5 y 4.5s
+    const randomTypingDelay = Math.floor(Math.random() * 2000) + 2500;
+    await this.delay(randomTypingDelay);
+
+    // 3. Detener presencia
+    await this.sock.sendPresenceUpdate('paused', jid);
+
+    // 4. Enviar mensaje
+    return await this.sock.sendMessage(jid, { text: texto });
+  }
+
+  // Método de negocio para enviar mensajes directo/rápido (Chat/IA/Mensajería)
   async enviarMensajeTexto(phone: string, message: string) {
     if (!this.sock) {
       throw new ServiceUnavailableException(

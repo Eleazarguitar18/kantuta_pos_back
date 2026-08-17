@@ -214,9 +214,20 @@ export class ReportesService {
       throw new NotFoundException(`Sesión de caja con ID ${idSesion} no encontrada`);
     }
 
-    const movimientos = await this.movimientoCajaRepository.find({
+    // Obtenemos todos los movimientos y luego filtramos los auto-generados
+    // por el sistema (recargas de clientes y fondeos de operadoras)
+    const movimientosSinFiltrar = await this.movimientoCajaRepository.find({
       where: { id_sesion_caja: idSesion, estado: true },
       order: { fecha: 'ASC' },
+    });
+
+    // Excluir movimientos automáticos de recargas y fondeos de operadoras
+    // (estos no representan movimientos manuales de caja)
+    const movimientos = movimientosSinFiltrar.filter((m) => {
+      const motivo = (m.motivo || '').toLowerCase();
+      if (motivo.startsWith('venta de recarga a cliente')) return false;
+      if (motivo.startsWith('fondeo de saldo a operadora')) return false;
+      return true;
     });
 
     const totalIngresos = movimientos

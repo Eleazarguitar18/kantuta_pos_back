@@ -113,6 +113,10 @@ export class AiAssistantService {
             - NO digas "¡Hola!", "Buenas tardes", "Soy Kantu" ni menciones tu nombre al inicio.
             - Inicia la respuesta DIRECTAMENTE con el desglose de los datos.
             
+            REGLA DE FORMATO DE MONEDA (OBLIGATORIA):
+            - Toda cifra monetaria, precio, total o saldo DEBE expresarse estrictamente en Bolivianos utilizando el sufijo o prefijo 'Bs' (Ejemplo: '15 Bs' o 'Bs. 15').
+            - Está estrictamente prohibido usar el símbolo de dólar '$'. Si lo usas, la respuesta será rechazada.
+            
             Instrucciones de formato:
             - Usa viñetas "•" y palabras clave en *negrita* para WhatsApp.`
           },
@@ -121,7 +125,11 @@ export class AiAssistantService {
         temperature: 0.1,
       });
 
-      return respuestaFinal.choices[0].message.content?.trim() || 'Sin datos disponibles.';
+      // Sanitización final: reemplazar cualquier '$' residual que el LLM pueda haber generado
+      const respuestaTexto = (respuestaFinal.choices[0].message.content?.trim() || 'Sin datos disponibles.')
+        .replace(/\$/g, 'Bs.');
+
+      return respuestaTexto;
 
     } catch (error) {
       this.logger.error('Error crítico en el flujo del Asistente:', error);
