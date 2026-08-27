@@ -39,6 +39,21 @@ export class VentasController {
     return this.ventasService.findAll();
   }
 
+  @Get('cuentas-por-cobrar/listar')
+  @ApiOperation({ summary: 'Obtener todas las cuentas por cobrar / ventas fiadas' })
+  obtenerCuentasPorCobrar() {
+    return this.ventasService.obtenerCuentasPorCobrar();
+  }
+
+  @Post('cuentas-por-cobrar/:id/cobrar')
+  @ApiOperation({ summary: 'Cobrar / cancelar deuda de una cuenta por cobrar' })
+  cobrarCuenta(
+    @Param('id') id: string,
+    @Body() body: { id_sesion_caja: number; metodo_pago: string; id_user_update: number },
+  ) {
+    return this.ventasService.cobrarCuenta(+id, body);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una venta por ID' })
   findOne(@Param('id') id: string) {

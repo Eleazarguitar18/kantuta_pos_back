@@ -25,6 +25,10 @@ export class SesionCaja extends BaseEntityAudit {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   diferencia: number;
 
+  @ApiProperty({ description: 'Detalle/Desglose completo de planilla de arqueo' })
+  @Column({ type: 'jsonb', nullable: true })
+  desglose_arqueo: any;
+
   @ApiProperty({ example: 'ABIERTA', enum: ['ABIERTA', 'CERRADA'] })
   @Column({ name: 'estado_sesion', default: 'ABIERTA' })
   estado_sesion: string;

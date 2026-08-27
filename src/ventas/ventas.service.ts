@@ -8,10 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between } from 'typeorm';
 import { Venta } from './entities/venta.entity';
 import { DetalleVenta } from './entities/detalle-venta.entity';
+import { CuentaPorCobrar } from './entities/cuenta-por-cobrar.entity';
 import { CrearVentaDto } from './dto/crear-venta.dto';
 import { ActualizarVentaDto } from './dto/actualizar-venta.dto';
 import { Producto } from '../inventario/entities/producto.entity';
 import { SesionCaja } from '../cajas/entities/sesion-caja.entity';
+import { MovimientoCaja } from '../cajas/entities/movimiento-caja.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { GetReporteVentasDto } from './dto/get-reporte-ventas.dto';
 import { Caja } from 'src/cajas/entities/caja.entity';
@@ -24,6 +26,8 @@ export class VentasService {
   constructor(
     @InjectRepository(Venta)
     private readonly ventaRepository: Repository<Venta>,
+    @InjectRepository(CuentaPorCobrar)
+    private readonly cuentaPorCobrarRepository: Repository<CuentaPorCobrar>,
     private readonly dataSource: DataSource,
     private readonly appGateway: AppGateway,
     private readonly stockAlertService: StockAlertService,
@@ -106,12 +110,14 @@ export class VentasService {
         throw new BadRequestException(`No se pudo encontrar la caja física.`);
       }
 
-      // 4. ACTUALIZAR EL NUEVO SALDO EN LA CAJA (Convertimos a Number por los decimales de Postgres)
-      const saldoActual = Number(cajaFisica.saldo ?? 0);
-      cajaFisica.saldo = saldoActual + total;
-
-      // Guardamos la caja con su nuevo saldo dentro de la transacción
-      await queryRunner.manager.save(Caja, cajaFisica);
+      // 4. ACTUALIZAR EL NUEVO SALDO EN LA CAJA solo si no es venta fiada/crédito
+      const isCuentaPorCobrar = crearVentaDto.metodo_pago === ('CUENTA_POR_COBRAR' as any);
+      if (!isCuentaPorCobrar) {
+        const saldoActual = Number(cajaFisica.saldo ?? 0);
+        cajaFisica.saldo = saldoActual + total;
+        // Guardamos la caja con su nuevo saldo dentro de la transacción
+        await queryRunner.manager.save(Caja, cajaFisica);
+      }
 
       // 5. Crear y consolidar la entidad Venta
       const venta = queryRunner.manager.create(Venta, {
@@ -121,6 +127,18 @@ export class VentasService {
       });
 
       const savedVenta = await queryRunner.manager.save(Venta, venta);
+
+      // Si es cuenta por cobrar, registramos la deuda pendiente
+      if (isCuentaPorCobrar) {
+        const cuentaPorCobrar = queryRunner.manager.create(CuentaPorCobrar, {
+          id_venta: savedVenta.id,
+          cliente_nombre: crearVentaDto.cliente_nombre || 'Cliente sin nombre',
+          monto: total,
+          estado_cuenta: 'PENDIENTE',
+          id_user_create: crearVentaDto.id_user_create,
+        });
+        await queryRunner.manager.save(CuentaPorCobrar, cuentaPorCobrar);
+      }
 
       // Confirmar todos los cambios en bloque (Commit de la transacción)
       await queryRunner.commitTransaction();
@@ -275,5 +293,96 @@ export class VentasService {
         estado_venta: v.estado_venta,
       })),
     };
+  }
+
+  async obtenerCuentasPorCobrar(): Promise<CuentaPorCobrar[]> {
+    return this.cuentaPorCobrarRepository.find({
+      where: { estado: true },
+      relations: ['venta', 'venta.detalles', 'venta.detalles.producto'],
+      order: { id: 'DESC' },
+    });
+  }
+
+  async cobrarCuenta(
+    id: number,
+    body: { id_sesion_caja: number; metodo_pago: string; id_user_update: number },
+  ): Promise<CuentaPorCobrar> {
+    const { id_sesion_caja, metodo_pago, id_user_update } = body;
+
+    const cuenta = await this.cuentaPorCobrarRepository.findOne({
+      where: { id, estado: true },
+      relations: ['venta'],
+    });
+
+    if (!cuenta) {
+      throw new NotFoundException(`Cuenta por cobrar con ID ${id} no encontrada`);
+    }
+
+    if (cuenta.estado_cuenta === 'PAGADO') {
+      throw new BadRequestException(`La cuenta por cobrar ya se encuentra pagada`);
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Obtener la sesión de caja activa
+      const sesionCaja = await queryRunner.manager.findOne(SesionCaja, {
+        where: { id: id_sesion_caja, estado: true },
+        relations: ['caja'],
+      });
+
+      if (!sesionCaja || sesionCaja.estado_sesion !== 'ABIERTA') {
+        throw new BadRequestException(`La sesión de caja ID ${id_sesion_caja} no está abierta o no existe`);
+      }
+
+      const montoCobro = Number(cuenta.monto);
+
+      // 2. Si el método de pago es EFECTIVO (o QR si ingresa a caja física), actualizamos el saldo
+      if (metodo_pago === 'EFECTIVO' && sesionCaja.caja) {
+        const caja = await queryRunner.manager.findOne(Caja, {
+          where: { id: sesionCaja.caja.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (caja) {
+          caja.saldo = Number(caja.saldo ?? 0) + montoCobro;
+          await queryRunner.manager.save(Caja, caja);
+        }
+
+        // Registrar movimiento de ingreso en la caja
+        const movimiento = queryRunner.manager.create(MovimientoCaja, {
+          id_sesion_caja,
+          monto: montoCobro,
+          tipo: 'INGRESO',
+          motivo: `Cobro de Cuenta por Cobrar #${cuenta.id} - Cliente: ${cuenta.cliente_nombre}`,
+          id_user_create: id_user_update,
+        });
+        await queryRunner.manager.save(MovimientoCaja, movimiento);
+      }
+
+      // 3. Actualizar la Cuenta por Cobrar
+      cuenta.estado_cuenta = 'PAGADO';
+      cuenta.fecha_pago = new Date();
+      cuenta.metodo_pago_cancelacion = metodo_pago;
+      cuenta.id_user_update = id_user_update;
+
+      const cuentaActualizada = await queryRunner.manager.save(CuentaPorCobrar, cuenta);
+
+      await queryRunner.commitTransaction();
+
+      if (this.appGateway) {
+        this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+        this.appGateway.notifyDataChange('venta', 'cuenta_cobrada');
+      }
+
+      return cuentaActualizada;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

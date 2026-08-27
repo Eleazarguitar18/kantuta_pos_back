@@ -8,12 +8,16 @@ import { Repository } from 'typeorm';
 import { Caja } from './entities/caja.entity';
 import { SesionCaja } from './entities/sesion-caja.entity';
 import { MovimientoCaja } from './entities/movimiento-caja.entity';
+import { PrestamoCaja } from './entities/prestamo-caja.entity';
 import { AbrirCajaDto } from './dto/abrir-caja.dto';
 import { CerrarCajaDto } from './dto/cerrar-caja.dto';
 import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
+import { CrearPrestamoDto } from './dto/crear-prestamo.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
 import { AppGateway } from 'src/gateway/app.gateway';
+
+import { Producto } from '../inventario/entities/producto.entity';
 
 @Injectable()
 export class CajasService {
@@ -24,7 +28,11 @@ export class CajasService {
     private readonly sesionCajaRepository: Repository<SesionCaja>,
     @InjectRepository(MovimientoCaja)
     private readonly movimientoCajaRepository: Repository<MovimientoCaja>,
-    private readonly appGateway: AppGateway, // <-- 1. Inyectamos tu WebSocket Gateway
+    @InjectRepository(PrestamoCaja)
+    private readonly prestamoCajaRepository: Repository<PrestamoCaja>,
+    @InjectRepository(Producto)
+    private readonly productoRepository: Repository<Producto>,
+    private readonly appGateway: AppGateway,
   ) {}
 
   async create(createCajaDto: CreateCajaDto): Promise<Caja> {
@@ -123,6 +131,7 @@ export class CajasService {
       id_usuario,
       estado_sesion: 'ABIERTA',
       id_user_create,
+      desglose_arqueo: abrirCajaDto.desglose_arqueo || null,
     });
 
     const nuevaSesion = await this.sesionCajaRepository.save(sesion);
@@ -131,6 +140,68 @@ export class CajasService {
     this.appGateway.notifyDataChange('caja', 'CAJA_ABIERTA');
 
     return nuevaSesion;
+  }
+
+  async getResumenInventario(): Promise<any[]> {
+    try {
+      const productos = await this.productoRepository.find({
+        where: { estado: true },
+        relations: ['categoria'],
+        order: { id: 'ASC' },
+      });
+
+      return (productos || []).map((p) => ({
+        id: p.id,
+        nombre: p.nombre || '',
+        codigo_barras: p.codigo_barras || '',
+        precio_venta: Number(p.precio_venta || 0),
+        costo_compra: Number(p.costo_compra || 0),
+        stock_actual: p.stock_actual ?? 0,
+        stockActual: p.stock_actual ?? 0,
+        categoria: p.categoria ? p.categoria.nombre : 'Sin Categoría',
+        id_categoria: p.categoria ? p.categoria.id : null,
+      }));
+    } catch (error) {
+      console.error('Error en getResumenInventario:', error);
+      return [];
+    }
+  }
+
+  async getEstadoInventario(): Promise<any[]> {
+    try {
+      const productos = await this.productoRepository.find({
+        where: { estado: true },
+        relations: ['categoria'],
+        order: { id: 'ASC' },
+      });
+
+      return (productos || []).map((p) => {
+        const catNombre = p.categoria ? p.categoria.nombre : 'Sin Categoría';
+        const pNombre = (p.nombre || '').toLowerCase();
+        const catLower = catNombre.toLowerCase();
+        const isPlatform =
+          catLower.includes('recarga') ||
+          catLower.includes('plataforma') ||
+          pNombre.includes('viva box') ||
+          pNombre.includes('kiosco');
+
+        return {
+          id: p.id,
+          nombre: p.nombre || '',
+          codigo_barras: p.codigo_barras || '',
+          precio_venta: Number(p.precio_venta || 0),
+          costo_compra: Number(p.costo_compra || 0),
+          stockSistema: p.stock_actual ?? 0,
+          stock_actual: p.stock_actual ?? 0,
+          categoria: catNombre,
+          id_categoria: p.categoria ? p.categoria.id : null,
+          tipo: isPlatform ? 'SALDO_VIRTUAL' : 'FISICO',
+        };
+      });
+    } catch (error) {
+      console.error('Error en getEstadoInventario:', error);
+      return [];
+    }
   }
 
   async cerrarCaja(
@@ -163,12 +234,15 @@ export class CajasService {
 
     const monto_final_teorico =
       Number(sesion.monto_inicial) + totalIngresos - totalEgresos;
-    const { monto_final_real } = cerrarCajaDto;
+    const { monto_final_real, desglose_arqueo } = cerrarCajaDto;
     const diferencia = monto_final_real - monto_final_teorico;
 
     sesion.monto_final_teorico = monto_final_teorico;
     sesion.monto_final_real = monto_final_real;
     sesion.diferencia = diferencia;
+    if (desglose_arqueo) {
+      sesion.desglose_arqueo = desglose_arqueo;
+    }
     sesion.estado_sesion = 'CERRADA';
     sesion.fecha_cierre = new Date();
     sesion.id_user_update = id_user_update;
@@ -295,5 +369,127 @@ export class CajasService {
     caja.id_user_update = id_user_update;
     await this.cajaRepository.save(caja);
     this.appGateway.notifyDataChange('caja', 'eliminada');
+  }
+
+  async crearPrestamo(crearPrestamoDto: CrearPrestamoDto): Promise<PrestamoCaja> {
+    const { id_sesion_caja, monto, motivo, id_user_create } = crearPrestamoDto;
+
+    const sesion = await this.sesionCajaRepository.findOne({
+      where: { id: id_sesion_caja, estado: true },
+      relations: ['caja'],
+    });
+
+    if (!sesion || sesion.estado_sesion !== 'ABIERTA') {
+      throw new BadRequestException(`No hay una sesión de caja abierta para registrar el préstamo`);
+    }
+
+    if (!sesion.caja) {
+      throw new BadRequestException(`La sesión no cuenta con una caja física asociada`);
+    }
+
+    const caja = sesion.caja;
+    const saldoActual = Number(caja.saldo ?? 0);
+    const montoPrestamo = Number(monto);
+
+    if (saldoActual < montoPrestamo) {
+      throw new BadRequestException(`Fondos insuficientes en caja. Saldo disponible: ${saldoActual}`);
+    }
+
+    // 1. Descontar del saldo de la caja física
+    caja.saldo = saldoActual - montoPrestamo;
+    await this.cajaRepository.save(caja);
+
+    // 2. Registrar movimiento de egreso
+    const movimiento = this.movimientoCajaRepository.create({
+      id_sesion_caja,
+      monto: montoPrestamo,
+      tipo: 'EGRESO',
+      motivo: `[Préstamo / Salida de Caja] ${motivo}`,
+      id_user_create,
+    });
+    await this.movimientoCajaRepository.save(movimiento);
+
+    // 3. Crear registro de PrestamoCaja
+    const prestamo = this.prestamoCajaRepository.create({
+      id_sesion_caja,
+      monto: montoPrestamo,
+      motivo,
+      estado_prestamo: 'PENDIENTE',
+      id_user_create,
+    });
+
+    const nuevoPrestamo = await this.prestamoCajaRepository.save(prestamo);
+
+    this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+    this.appGateway.notifyDataChange('caja', 'prestamo_creado');
+
+    return nuevoPrestamo;
+  }
+
+  async findAllPrestamos(): Promise<PrestamoCaja[]> {
+    return this.prestamoCajaRepository.find({
+      where: { estado: true },
+      relations: ['sesion_caja'],
+      order: { id: 'DESC' },
+    });
+  }
+
+  async pagarPrestamo(
+    id: number,
+    body: { id_sesion_caja: number; id_user_update: number },
+  ): Promise<PrestamoCaja> {
+    const { id_sesion_caja, id_user_update } = body;
+
+    const prestamo = await this.prestamoCajaRepository.findOne({
+      where: { id, estado: true },
+    });
+
+    if (!prestamo) {
+      throw new NotFoundException(`Préstamo con ID ${id} no encontrado`);
+    }
+
+    if (prestamo.estado_prestamo === 'PAGADO') {
+      throw new BadRequestException(`El préstamo ya fue devuelto / pagado`);
+    }
+
+    const sesion = await this.sesionCajaRepository.findOne({
+      where: { id: id_sesion_caja, estado: true },
+      relations: ['caja'],
+    });
+
+    if (!sesion || sesion.estado_sesion !== 'ABIERTA') {
+      throw new BadRequestException(`No hay una sesión de caja abierta para recibir la devolución`);
+    }
+
+    const montoDevolucion = Number(prestamo.monto);
+
+    // 1. Aumentar el saldo de la caja física
+    if (sesion.caja) {
+      const caja = sesion.caja;
+      caja.saldo = Number(caja.saldo ?? 0) + montoDevolucion;
+      await this.cajaRepository.save(caja);
+    }
+
+    // 2. Registrar movimiento de ingreso
+    const movimiento = this.movimientoCajaRepository.create({
+      id_sesion_caja,
+      monto: montoDevolucion,
+      tipo: 'INGRESO',
+      motivo: `[Devolución de Préstamo #${prestamo.id}] ${prestamo.motivo}`,
+      id_user_create: id_user_update,
+    });
+    await this.movimientoCajaRepository.save(movimiento);
+
+    // 3. Actualizar estado del préstamo
+    prestamo.estado_prestamo = 'PAGADO';
+    prestamo.fecha_devolucion = new Date();
+    prestamo.id_user_update = id_user_update;
+
+    const prestamoPagado = await this.prestamoCajaRepository.save(prestamo);
+
+    this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+    this.appGateway.notifyDataChange('caja', 'prestamo_pagado');
+
+    return prestamoPagado;
   }
 }

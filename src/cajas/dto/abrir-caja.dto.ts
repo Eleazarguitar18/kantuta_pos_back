@@ -21,4 +21,8 @@ export class AbrirCajaDto {
   @IsInt()
   @IsNotEmpty()
   id_user_create: number;
+
+  @ApiProperty({ description: 'Snapshot/Desglose de arqueo inicial al abrir turno', required: false })
+  @IsOptional()
+  desglose_arqueo?: any;
 }

@@ -17,6 +17,7 @@ import { CajasService } from './cajas.service';
 import { AbrirCajaDto } from './dto/abrir-caja.dto';
 import { CerrarCajaDto } from './dto/cerrar-caja.dto';
 import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
+import { CrearPrestamoDto } from './dto/crear-prestamo.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
 
@@ -28,6 +29,34 @@ export class CajasController {
   @Get()
   findAllCajas() {
     return this.cajasService.findAllCajas();
+  }
+
+  @Get('resumen-inventario')
+  getResumenInventario() {
+    return this.cajasService.getResumenInventario();
+  }
+
+  @Get('estado-inventario')
+  getEstadoInventario() {
+    return this.cajasService.getEstadoInventario();
+  }
+
+  @Get('prestamos/listar')
+  findAllPrestamos() {
+    return this.cajasService.findAllPrestamos();
+  }
+
+  @Post('prestamos')
+  crearPrestamo(@Body() crearPrestamoDto: CrearPrestamoDto) {
+    return this.cajasService.crearPrestamo(crearPrestamoDto);
+  }
+
+  @Post('prestamos/:id/pagar')
+  pagarPrestamo(
+    @Param('id') id: string,
+    @Body() body: { id_sesion_caja: number; id_user_update: number },
+  ) {
+    return this.cajasService.pagarPrestamo(+id, body);
   }
 
   @Roles('Administrador')
