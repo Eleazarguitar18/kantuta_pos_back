@@ -18,6 +18,7 @@ import { UpdateCajaDto } from './dto/update-caja.dto';
 import { AppGateway } from 'src/gateway/app.gateway';
 
 import { Producto } from '../inventario/entities/producto.entity';
+import { MoreThanOrEqual } from 'typeorm';
 
 @Injectable()
 export class CajasService {
@@ -373,6 +374,24 @@ export class CajasService {
 
   async crearPrestamo(crearPrestamoDto: CrearPrestamoDto): Promise<PrestamoCaja> {
     const { id_sesion_caja, monto, motivo, id_user_create } = crearPrestamoDto;
+
+    // Idempotencia: verificar si ya existe un préstamo idéntico en los últimos 3 segundos
+    const tiempoLimite = new Date(Date.now() - 3000);
+    const prestamoExistente = await this.prestamoCajaRepository.findOne({
+      where: {
+        id_sesion_caja,
+        monto: Number(monto),
+        motivo,
+        fecha_prestamo: MoreThanOrEqual(tiempoLimite),
+      },
+      relations: ['sesion_caja'],
+    });
+
+    if (prestamoExistente) {
+      throw new BadRequestException(
+        `Ya existe un préstamo idéntico (monto: ${monto}, motivo: ${motivo}) registrado hace menos de 3 segundos. Reintento bloqueado por idempotencia.`,
+      );
+    }
 
     const sesion = await this.sesionCajaRepository.findOne({
       where: { id: id_sesion_caja, estado: true },

@@ -22,4 +22,9 @@ export class CrearPrestamoDto {
   @IsInt()
   @IsNotEmpty()
   id_user_create: number;
+
+  @ApiProperty({ example: 1, description: 'ID de la caja asociada' })
+  @IsInt()
+  @IsNotEmpty()
+  cajaId: number;
 }
