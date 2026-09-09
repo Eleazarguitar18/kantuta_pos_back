@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportesService } from 'src/reportes/services/reportes.service';
-// 1. IMPORTA AQUÍ TUS OTROS SERVICES SEGÚN VAYAS NECESITANDO
 // import { ProveedoresService } from '../proveedores/proveedores.service'; 
 
 @Injectable()
@@ -15,16 +15,28 @@ export class AiAssistantService {
 
   constructor(
     private readonly reportesService: ReportesService,
-    // 2. INYÉCTALOS EN EL CONSTRUCTOR
+    private readonly configService: ConfigService,
     // private readonly proveedoresService: ProveedoresService, 
   ) {
+    // Obtenemos la API key desde el ConfigService de NestJS o del entorno global
+    const apiKey = this.configService.get<string>('GROQ_API_KEY') || process.env.GROQ_API_KEY;
+
+    if (!apiKey) {
+      this.logger.error('❌ CRÍTICO: GROQ_API_KEY no fue encontrada en las variables de entorno.');
+    }
+
     this.openai = new OpenAI({
-      baseURL: 'https://api.groq.com/openai/v1', // URL de tu pasarela Groq
-      apiKey: process.env.GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: apiKey || '',
     });
 
     const promptPath = path.join(process.cwd(), 'src/ai-assistant/prompts/kantuta.promt.md');
-    this.systemInstruction = fs.readFileSync(promptPath, 'utf8');
+    try {
+      this.systemInstruction = fs.readFileSync(promptPath, 'utf8');
+    } catch (err) {
+      this.logger.error(`Error al cargar el prompt en ${promptPath}:`, err);
+      this.systemInstruction = '';
+    }
   }
 
   async procesarConsulta(texto: string): Promise<string> {
@@ -71,7 +83,6 @@ export class AiAssistantService {
       const anioActual = new Date().getFullYear();
       const { inicio, fin } = this.extraerFechas(texto);
 
-      // Evaluamos la intención limpia determinada por la IA
       if (intencionLimpia.includes('DASHBOARD')) {
         dataCruda = await this.reportesService.getDashboardStats(anioActual);
       }
@@ -87,9 +98,8 @@ export class AiAssistantService {
       else if (intencionLimpia.includes('OPERADOR')) {
         dataCruda = await this.reportesService.getProductividadOperadorData(inicio, fin);
       }
-      // ---> AQUÍ EJECUTAS EL MÉTODO DE TU OTRO SERVICIO <---
       else if (intencionLimpia.includes('PROVEEDORES')) {
-        // Ejemplo ficticio: dataCruda = await this.proveedoresService.findAll();
+        // Ejemplo: dataCruda = await this.proveedoresService.findAll();
         dataCruda = [
           { id: 1, empresa: 'Distribuidora Norte', contacto: 'Juan Pérez', telefono: '71234567', estado: 'Activo' },
           { id: 2, empresa: 'Almacenes Central', contacto: 'María Gomez', telefono: '76543210', estado: 'Activo' }
@@ -97,7 +107,7 @@ export class AiAssistantService {
       }
 
       // ==========================================
-      // PASO 3: REDACCIÓN FINAL (IGUAL DE ESTRICTA)
+      // PASO 3: REDACCIÓN FINAL
       // ==========================================
       const respuestaFinal = await this.openai.chat.completions.create({
         model: this.MODELO_IA,
@@ -125,7 +135,6 @@ export class AiAssistantService {
         temperature: 0.1,
       });
 
-      // Sanitización final: reemplazar cualquier '$' residual que el LLM pueda haber generado
       const respuestaTexto = (respuestaFinal.choices[0].message.content?.trim() || 'Sin datos disponibles.')
         .replace(/\$/g, 'Bs.');
 

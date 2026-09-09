@@ -9,8 +9,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   WASocket,
-  fetchLatestBaileysVersion, // 👈 1. Importamos la función oficial
-  Browsers, // 👈 2. Importamos el preset oficial de navegadores
+  fetchLatestBaileysVersion,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import * as QRCodeNode from 'qrcode';
 import pino = require('pino');
@@ -18,38 +18,68 @@ import { Jimp } from 'jimp';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AiAssistantService } from 'src/ai-assistant/ai-assistant.service';
+
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private sock: WASocket | null = null;
   private ultimoQr: string | null = null;
 
-  // Se ejecuta automáticamente al arrancar la aplicación de NestJS
   async onModuleInit() {
     await this.conectarWhatsapp();
   }
+
   constructor(private readonly aiAssistantService: AiAssistantService) {}
+
+  // 🛡️ HELPER ANTI-BANEO: Retardo aleatorio en milisegundos
+  private delayAleatorio(minMs: number, maxMs: number): Promise<void> {
+    const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // 🛡️ HELPER ANTI-BANEO: Simula presencia humana ('Escribiendo...') previa al envío
+  private async simularComportamientoHumano(jid: string, texto?: string) {
+    if (!this.sock) return;
+
+    try {
+      // 1. Pausa inicial corta (como si el humano abriera el chat o adjuntara el archivo)
+      await this.delayAleatorio(1000, 2000);
+
+      // 2. Transmisión de estado 'Escribiendo...' en WhatsApp
+      await this.sock.sendPresenceUpdate('composing', jid);
+
+      // 3. Cálculo de tiempo de tipeo proporcional al texto (o base para multimedia)
+      const caracteres = texto ? texto.length : 20;
+      const msPorCaracter = 50; // ~20 caracteres por segundo
+      const tiempoCalculado = caracteres * msPorCaracter;
+
+      // Mantener 'composing' entre 1.8s y máximo 4.5s
+      const tiempoTipeo = Math.min(Math.max(tiempoCalculado, 1800), 4500);
+      await this.delayAleatorio(tiempoTipeo, tiempoTipeo + 1000);
+
+      // 4. Detener el estado de tipeo
+      await this.sock.sendPresenceUpdate('paused', jid);
+      await this.delayAleatorio(300, 800);
+    } catch (e) {
+      console.warn(`[Anti-Ban Warning] No se pudo enviar presencia a ${jid}`);
+    }
+  }
+
   private async conectarWhatsapp() {
     const folderName = process.env.AUTH_FOLDER_NAME || 'auth_info_baileys';
-
     const { state, saveCreds } = await useMultiFileAuthState(folderName);
 
-    // Obtener dinámicamente la versión de WhatsApp Web con fallback
-    const { version, isLatest } = await fetchLatestBaileysVersion().catch(
-      () => ({
-        version: [2, 3000, 1015901307] as [number, number, number],
-        isLatest: false,
-      }),
-    );
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({
+      version: [2, 3000, 1015901307] as [number, number, number],
+      isLatest: false,
+    }));
 
-    console.log(
-      `📡 [NestJS] Conectando con versión de WA Web: v${version.join('.')}`,
-    );
+    console.log(`📡 [NestJS] Conectando con versión de WA Web: v${version.join('.')}`);
 
     this.sock = makeWASocket({
-      version, // 👈 Asignamos la versión obtenida
+      version,
       auth: state,
       logger: pino({ level: 'silent' }) as any,
-      browser: Browsers.ubuntu('Chrome'), // 👈 Usar el helper nativo de Baileys
+      browser: Browsers.ubuntu('Chrome'),
       syncFullHistory: false,
     });
 
@@ -62,34 +92,22 @@ export class WhatsappService implements OnModuleInit {
 
       if (qr) {
         this.ultimoQr = qr;
-        console.log(
-          '🔄 [NestJS] Nuevo código QR generado. Escanéalo en /whatsapp/connect/view',
-        );
+        console.log('🔄 [NestJS] Nuevo código QR generado. Escanéalo en /whatsapp/connect/view');
       }
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        console.log(
-          `❌ Conexión cerrada (Status Code: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`,
-        );
+        console.log(`❌ Conexión cerrada (Status Code: ${statusCode}). ¿Reconectando?: ${shouldReconnect}`);
 
-        if (
-          statusCode === DisconnectReason.loggedOut ||
-          statusCode === 401 ||
-          statusCode === 500
-        ) {
-          console.warn(
-            '⚠️ Sesión invalidad por Meta. Limpiando credenciales para forzar nuevo QR...',
-          );
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 500) {
+          console.warn('⚠️ Sesión invalidad por Meta. Limpiando credenciales para forzar nuevo QR...');
           this.ultimoQr = null;
-          // Limpiar la carpeta de auth si la sesión expiró o fue deslogueada por Meta
           const authPath = path.resolve(folderName);
           if (fs.existsSync(authPath)) {
             fs.rmSync(authPath, { recursive: true, force: true });
           }
-          // Volver a reconectar inmediatamente para solicitar nuevo QR
           setTimeout(() => this.conectarWhatsapp(), 3000);
         } else if (shouldReconnect) {
           setTimeout(() => this.conectarWhatsapp(), 5000);
@@ -100,72 +118,64 @@ export class WhatsappService implements OnModuleInit {
 
       if (connection === 'open') {
         this.ultimoQr = null;
-        console.log(
-          '✅ [NestJS] ¡Conexión con WhatsApp establecida con éxito!',
-        );
+        console.log('✅ [NestJS] ¡Conexión con WhatsApp establecida con éxito!');
       }
     });
-    // --- NUEVO: ESCUCHAR MENSAJES ENTRANTES ---
+
+    // --- ESCUCHAR MENSAJES ENTRANTES CON IA ---
     this.sock.ev.on('messages.upsert', async (m) => {
       if (m.type !== 'notify') return;
       const msg = m.messages[0];
 
-      // Filtros: solo procesar mensajes de texto y que no sean del bot
       if (!msg.message || msg.key.fromMe) return;
-      // --- AQUÍ VA LA VALIDACIÓN DE TIEMPO ---
+
       const msgTimestamp = msg.messageTimestamp;
       const now = Math.floor(Date.now() / 1000);
 
-      // Si el mensaje es más viejo de 60 segundos, lo ignoramos para no saturar
       if (msgTimestamp && now - Number(msgTimestamp) > 60) {
         console.log(`[IA] Ignorando mensaje antiguo de ${msg.key.remoteJid}`);
         return;
       }
-      // ----------------------------------------
+
       const remoteJid = msg.key.remoteJid;
-      const texto =
-        msg.message.conversation || msg.message.extendedTextMessage?.text;
+      const texto = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
       if (remoteJid?.endsWith('@g.us')) {
         console.log(`[BLOCK] Mensaje de grupo ignorado: ${remoteJid}`);
         return;
       }
-      if (texto) {
-        console.log(`[IA] recibiendo mensaje de ${remoteJid}: ${texto}`);
-        await this.enviarEstadoEscribiendo(remoteJid as string);
-        console.log(`[IA] Activando animación de escritura para ${remoteJid}`);
-        // 1. Llamamos a nuestra IA
+
+      if (texto && remoteJid) {
+        console.log(`[IA] Recibiendo mensaje de ${remoteJid}: ${texto}`);
+        
+        // 1. Procesamiento con IA
         const respuesta = await this.aiAssistantService.procesarConsulta(texto);
-        console.log(`[IA] respondiendo a ${remoteJid}: ${respuesta}`);
-        // 2. Respondemos por WhatsApp
-        await this.enviarRespuestaIA(remoteJid as string, respuesta);
-        console.log(
-          `🤖 IA respondió a ${remoteJid}: Mensaje entregado con éxito.`,
-        );
+        console.log(`[IA] Respondiendo a ${remoteJid}: ${respuesta}`);
+
+        // 2. Responde simulando presencia anti-ban
+        await this.enviarRespuestaIA(remoteJid, respuesta);
+        console.log(`🤖 IA respondió a ${remoteJid}: Mensaje entregado con éxito.`);
       }
     });
-    // ------------------------------------------
   }
+
+  // --- MÉTODOS DE ENVÍO PROTEGIDOS CON ANTI-BANEO ---
+
   async enviarRespuestaIA(jid: string, message: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
-    // Aquí enviamos el jid tal cual llega (incluyendo @lid)
-    console.log(`🤖 Enviando respuesta de IA a: ${jid}`);
-
+    console.log(`🤖 [Anti-Ban] Enviando respuesta de IA a: ${jid}`);
+    await this.simularComportamientoHumano(jid, message);
     return await this.sock.sendMessage(jid, { text: message });
   }
 
   async enviarEstadoEscribiendo(jid: string) {
     if (!this.sock) return;
-
-    // 'composing' es el estado que muestra "Escribiendo..."
     await this.sock.sendPresenceUpdate('composing', jid);
   }
-  // Método para obtener el QR en formato Base64 para la vista web
+
   async obtenerQrHtml(): Promise<string | null> {
     if (!this.ultimoQr) return null;
     return await QRCodeNode.toDataURL(this.ultimoQr);
@@ -177,54 +187,41 @@ export class WhatsappService implements OnModuleInit {
 
   async enviarMensajeHumanizado(jid: string, texto: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
-
-    // 1. Simular presencia escribiendo
-    await this.sock.sendPresenceUpdate('composing', jid);
-
-    // 2. Tiempo de tipeo simulado proporcional o entre 2.5 y 4.5s
-    const randomTypingDelay = Math.floor(Math.random() * 2000) + 2500;
-    await this.delay(randomTypingDelay);
-
-    // 3. Detener presencia
-    await this.sock.sendPresenceUpdate('paused', jid);
-
-    // 4. Enviar mensaje
+    await this.simularComportamientoHumano(jid, texto);
     return await this.sock.sendMessage(jid, { text: texto });
   }
 
-  // Método de negocio para enviar mensajes directo/rápido (Chat/IA/Mensajería)
   async enviarMensajeTexto(phone: string, message: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const jid = `${cleanPhone}@s.whatsapp.net`;
 
+    // 🛡️ Protección anti-ban activada
+    await this.simularComportamientoHumano(jid, message);
     return await this.sock.sendMessage(jid, { text: message });
   }
+
   async enviarImagen(phone: string, imageUrl: string, caption?: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const jid = `${cleanPhone}@s.whatsapp.net`;
 
-    // Baileys detecta automáticamente si es una URL web (http/https) o una ruta local
+    // 🛡️ Protección anti-ban activada
+    await this.simularComportamientoHumano(jid, caption);
     return await this.sock.sendMessage(jid, {
       image: { url: imageUrl },
-      caption: caption || undefined, // Pie de foto opcional
+      caption: caption || undefined,
     });
   }
+
   async enviarImagenDesdeBuffer(
     phone: string,
     fileBuffer: Buffer,
@@ -232,9 +229,7 @@ export class WhatsappService implements OnModuleInit {
     caption?: string,
   ) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     const cleanPhone = phone.replace(/[^0-9]/g, '');
@@ -243,25 +238,17 @@ export class WhatsappService implements OnModuleInit {
     let thumbnailBase64: string | undefined;
 
     try {
-      // 1. Leemos el buffer original con Jimp v1.x
       const image = await Jimp.fromBuffer(fileBuffer);
-
-      // 2. Redimensionamos (en Jimp v1.x, pasar Jimp.AUTO para alto automático)
       image.resize({ w: 200 });
-
-      // 3. Obtenemos el buffer en formato JPEG
       const thumbnailBuffer = await image.getBuffer('image/jpeg');
       thumbnailBase64 = Buffer.from(thumbnailBuffer).toString('base64');
-
-      console.log('Miniatura generada con éxito usando Jimp v1.x');
     } catch (err) {
-      console.error(
-        'No se pudo generar el thumbnail, se enviará sin previsualización:',
-        err,
-      );
+      console.error('No se pudo generar el thumbnail, se enviará sin previsualización:', err);
     }
 
-    // Enviamos a Baileys v7
+    // 🛡️ Protección anti-ban activada
+    await this.simularComportamientoHumano(jid, caption);
+
     return await this.sock.sendMessage(jid, {
       image: fileBuffer,
       mimetype: mimeType,
@@ -270,8 +257,6 @@ export class WhatsappService implements OnModuleInit {
     });
   }
 
-  // ... envio de documentos ...
-
   async enviarDocumentoDesdeBuffer(
     phone: string,
     fileBuffer: Buffer,
@@ -279,84 +264,69 @@ export class WhatsappService implements OnModuleInit {
     fileName: string,
   ) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const jid = `${cleanPhone}@s.whatsapp.net`;
 
-    // Disparamos el mensaje indicando que es un documento
+    // 🛡️ Protección anti-ban activada (simula adjunción)
+    await this.simularComportamientoHumano(jid, fileName);
+
     return await this.sock.sendMessage(jid, {
       document: fileBuffer,
       mimetype: mimeType,
-      fileName: fileName, // El nombre con extensión que verá el usuario en su chat (Ej: documento.pdf)
+      fileName: fileName,
     });
   }
+
   async enviarMensajeAGrupo(groupId: string, mensaje: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     const cleanGroupId = groupId.trim();
 
     try {
-      console.log(`🚀 [v7] Enviando mensaje directo al grupo: ${cleanGroupId}`);
-      // La v7 ya se encarga de todo el cifrado LID de forma nativa aquí adentro
+      console.log(`🚀 [v7] Enviando mensaje a grupo con anti-ban: ${cleanGroupId}`);
+      // 🛡️ Protección anti-ban en grupos
+      await this.simularComportamientoHumano(cleanGroupId, mensaje);
       return await this.sock.sendMessage(cleanGroupId, { text: mensaje });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error crítico al enviar al grupo:', error);
       throw new InternalServerErrorException(
         `Error de protocolo Baileys v7: ${error.message}`,
       );
     }
   }
+
   async listarMisGrupos() {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     try {
       const grupos = await this.sock.groupFetchAllParticipating();
-
-      // console.log('====== OBJETO CRUDO DE GRUPOS RECIBIDO DE META ======');
-      // console.dir(grupos, { depth: null, colors: true });
-      // console.log('=====================================================');
-
-      // Devolvemos el mapeo normal para que no rompa tu Swagger
       return Object.values(grupos).map((grupo: any) => ({
         id: grupo.id,
         nombre: grupo.subject,
       }));
     } catch (error) {
       console.error('Error al listar los grupos de WhatsApp:', error);
-      throw new InternalServerErrorException(
-        'No se pudieron recuperar los grupos.',
-      );
+      throw new InternalServerErrorException('No se pudieron recuperar los grupos.');
     }
   }
+
   async obtenerParticipantesPorJid(jid: string) {
     if (!this.sock) {
-      throw new ServiceUnavailableException(
-        'El cliente de WhatsApp no está inicializado.',
-      );
+      throw new ServiceUnavailableException('El cliente de WhatsApp no está inicializado.');
     }
 
     try {
       console.log(`🔍 Buscando participantes en el grupo: ${jid}`);
-
-      // 1. Forzamos la sincronización de metadatos para asegurar que Baileys tenga la lista fresca
       const metadata = await this.sock.groupMetadata(jid);
-
-      // 2. Mapeamos la lista oficial de participantes que nos devuelve Meta
-      // Nota: En Baileys v6, los participantes ya vienen en el metadata
       const participantes = metadata.participants.map((p: any) => ({
-        id: p.id, // jid completo (ej: 5214491234567@s.whatsapp.net)
+        id: p.id,
         nombre: p.notify,
         esAdmin: p.admin || false,
       }));
