@@ -11,7 +11,7 @@ export class AiAssistantService {
   private openai: OpenAI;
   private systemInstruction: string;
   private readonly logger = new Logger(AiAssistantService.name);
-  private readonly MODELO_IA = 'llama-3.3-70b-versatile';
+  private readonly MODELO_IA = 'qwen/qwen3.6-27b';
 
   constructor(
     private readonly reportesService: ReportesService,
