@@ -4,21 +4,20 @@ import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportesService } from 'src/reportes/services/reportes.service';
-// import { ProveedoresService } from '../proveedores/proveedores.service'; 
 
 @Injectable()
 export class AiAssistantService {
   private openai: OpenAI;
   private systemInstruction: string;
   private readonly logger = new Logger(AiAssistantService.name);
-  private readonly MODELO_IA = 'qwen/qwen3.6-27b';
+
+  // 1. Cambiamos a un modelo optimizado para respuestas rápidas sin reasoning obligatorio
+  private readonly MODELO_IA = 'groq/compound';
 
   constructor(
     private readonly reportesService: ReportesService,
     private readonly configService: ConfigService,
-    // private readonly proveedoresService: ProveedoresService, 
   ) {
-    // Obtenemos la API key desde el ConfigService de NestJS o del entorno global
     const apiKey = this.configService.get<string>('GROQ_API_KEY') || process.env.GROQ_API_KEY;
 
     if (!apiKey) {
@@ -43,9 +42,7 @@ export class AiAssistantService {
     try {
       this.logger.log(`[IA-ASSISTANT] Solicitud: "${texto}"`);
 
-      // ==========================================
-      // PASO 1: AGREGAR LA NUEVA INTENCIÓN A LA IA
-      // ==========================================
+      // PASO 1: CLASIFICACIÓN CON CONTROL ESTRICTO DE TOKENS
       const clasificacion = await this.openai.chat.completions.create({
         model: this.MODELO_IA,
         messages: [
@@ -57,17 +54,18 @@ export class AiAssistantService {
             - INVENTARIO: Costos de almacén, stock actual, stock bajo y ganancias proyectadas.
             - COMPRAS: Inversiones en proveedores o egresos por rango de fechas.
             - OPERADOR: Rendimiento y ventas por cajero/operador.
-            - PROVEEDORES: Si pregunta por la lista de proveedores, quiénes están registrados o datos de contacto de los mismos.
-            - RECHAZAR: Saludos, despedidas o temas totalmente ajenos al negocio.
+            - PROVEEDORES: Lista de proveedores registrados o contactos.
+            - RECHAZAR: Saludos, despedidas o temas ajenos al negocio.
             
             No uses puntos ni explicaciones. Solo la palabra limpia.`
           },
           { role: 'user', content: texto }
         ],
         temperature: 0.0,
+        max_tokens: 20,
       });
 
-      const intencionLimpia = (clasificacion.choices[0].message.content || '')
+      const intencionLimpia = (clasificacion.choices[0].message?.content || '')
         .toUpperCase()
         .replace(/[^A-Z]/g, '')
         .trim();
@@ -76,39 +74,29 @@ export class AiAssistantService {
         return this.obtenerMenuPrincipal();
       }
 
-      // ==========================================
-      // PASO 2: ENRUTAMIENTO Y OBTENCIÓN DE DATA CRUDA
-      // ==========================================
+      // PASO 2: ENRUTAMIENTO
       let dataCruda: any = null;
       const anioActual = new Date().getFullYear();
       const { inicio, fin } = this.extraerFechas(texto);
 
       if (intencionLimpia.includes('DASHBOARD')) {
         dataCruda = await this.reportesService.getDashboardStats(anioActual);
-      }
-      else if (intencionLimpia.includes('RANGO')) {
+      } else if (intencionLimpia.includes('RANGO')) {
         dataCruda = await this.reportesService.getVentasRangoData(inicio, fin, 'Asistente_IA');
-      }
-      else if (intencionLimpia.includes('INVENTARIO')) {
+      } else if (intencionLimpia.includes('INVENTARIO')) {
         dataCruda = await this.reportesService.getInventarioData('Asistente_IA');
-      }
-      else if (intencionLimpia.includes('COMPRAS')) {
+      } else if (intencionLimpia.includes('COMPRAS')) {
         dataCruda = await this.reportesService.getComprasRangoData(inicio, fin, 'Asistente_IA');
-      }
-      else if (intencionLimpia.includes('OPERADOR')) {
+      } else if (intencionLimpia.includes('OPERADOR')) {
         dataCruda = await this.reportesService.getProductividadOperadorData(inicio, fin);
-      }
-      else if (intencionLimpia.includes('PROVEEDORES')) {
-        // Ejemplo: dataCruda = await this.proveedoresService.findAll();
+      } else if (intencionLimpia.includes('PROVEEDORES')) {
         dataCruda = [
           { id: 1, empresa: 'Distribuidora Norte', contacto: 'Juan Pérez', telefono: '71234567', estado: 'Activo' },
           { id: 2, empresa: 'Almacenes Central', contacto: 'María Gomez', telefono: '76543210', estado: 'Activo' }
         ];
       }
 
-      // ==========================================
       // PASO 3: REDACCIÓN FINAL
-      // ==========================================
       const respuestaFinal = await this.openai.chat.completions.create({
         model: this.MODELO_IA,
         messages: [
@@ -120,12 +108,11 @@ export class AiAssistantService {
             
             PROHIBICIÓN ABSOLUTA DE SALUDOS:
             - NO saludes bajo ninguna circunstancia.
-            - NO digas "¡Hola!", "Buenas tardes", "Soy Kantu" ni menciones tu nombre al inicio.
             - Inicia la respuesta DIRECTAMENTE con el desglose de los datos.
             
-            REGLA DE FORMATO DE MONEDA (OBLIGATORIA):
-            - Toda cifra monetaria, precio, total o saldo DEBE expresarse estrictamente en Bolivianos utilizando el sufijo o prefijo 'Bs' (Ejemplo: '15 Bs' o 'Bs. 15').
-            - Está estrictamente prohibido usar el símbolo de dólar '$'. Si lo usas, la respuesta será rechazada.
+            REGLA DE FORMATO DE MONEDA:
+            - Toda cifra monetaria DEBE expresarse en Bolivianos con 'Bs' o 'Bs.' (Ejemplo: '15 Bs').
+            - Prohibido usar '$'.
             
             Instrucciones de formato:
             - Usa viñetas "•" y palabras clave en *negrita* para WhatsApp.`
@@ -133,15 +120,19 @@ export class AiAssistantService {
           { role: 'user', content: texto }
         ],
         temperature: 0.1,
+        max_tokens: 400,
       });
 
-      const respuestaTexto = (respuestaFinal.choices[0].message.content?.trim() || 'Sin datos disponibles.')
-        .replace(/\$/g, 'Bs.');
+      let respuestaTexto = respuestaFinal.choices[0].message?.content?.trim() || 'Sin datos disponibles.';
 
-      return respuestaTexto;
+      // 2. Limpieza de etiquetas <think>...</think> en caso de usar modelos de razonamiento
+      respuestaTexto = respuestaTexto.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-    } catch (error) {
-      this.logger.error('Error crítico en el flujo del Asistente:', error);
+      // Normalización de moneda
+      return respuestaTexto.replace(/\$/g, 'Bs.');
+
+    } catch (error: any) {
+      this.logger.error('Error crítico en el flujo del Asistente:', error?.message || error);
       return '⚠️ *Kantu (Kantuta AI)*: Experimentando dificultades técnicas de consulta en este momento.';
     }
   }
