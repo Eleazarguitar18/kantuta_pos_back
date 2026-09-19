@@ -8,7 +8,9 @@ import {
   Delete,
   Query,
   UseGuards,
+  UsePipes,
   Req,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -17,8 +19,16 @@ import { CajasService } from './cajas.service';
 import { AbrirCajaDto } from './dto/abrir-caja.dto';
 import { CerrarCajaDto } from './dto/cerrar-caja.dto';
 import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
+import { CrearPrestamoDto, PagarPrestamoDto } from './dto/crear-prestamo.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
+
+// Validación de DTO en el controlador antes de procesar la petición
+const dtoValidationPipe = new ValidationPipe({
+  whitelist: true, // Descarta propiedades no declaradas en el DTO
+  forbidNonWhitelisted: true, // Rechaza la petición si llegan propiedades extra
+  transform: true, // Transforma el payload a la instancia del DTO
+});
 
 @UseGuards(AuthGuard, RolesGuard)
 @Controller('cajas')
@@ -28,6 +38,33 @@ export class CajasController {
   @Get()
   findAllCajas() {
     return this.cajasService.findAllCajas();
+  }
+
+  @Get('resumen-inventario')
+  getResumenInventario() {
+    return this.cajasService.getResumenInventario();
+  }
+
+  @Get('estado-inventario')
+  getEstadoInventario() {
+    return this.cajasService.getEstadoInventario();
+  }
+
+  @Get('prestamos/listar')
+  findAllPrestamos() {
+    return this.cajasService.findAllPrestamos();
+  }
+
+  @UsePipes(dtoValidationPipe)
+  @Post('prestamos')
+  crearPrestamo(@Body() crearPrestamoDto: CrearPrestamoDto) {
+    return this.cajasService.crearPrestamo(crearPrestamoDto);
+  }
+
+  @UsePipes(dtoValidationPipe)
+  @Post('prestamos/:id/pagar')
+  pagarPrestamo(@Param('id') id: string, @Body() body: PagarPrestamoDto) {
+    return this.cajasService.pagarPrestamo(+id, body);
   }
 
   @Roles('Administrador')
@@ -71,6 +108,7 @@ export class CajasController {
     return this.cajasService.abrirCaja(abrirCajaDto, userRole);
   }
 
+  @UsePipes(dtoValidationPipe)
   @Patch('sesion/:id/cerrar')
   cerrarCaja(@Param('id') id: string, @Body() cerrarCajaDto: CerrarCajaDto) {
     return this.cajasService.cerrarCaja(+id, cerrarCajaDto);

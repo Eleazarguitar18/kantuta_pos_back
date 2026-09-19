@@ -17,13 +17,37 @@ export class SesionCaja extends BaseEntityAudit {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   monto_final_teorico: number;
 
+  @ApiProperty({ example: 1550.50, description: 'Monto esperado calculado por el sistema (solo lectura)' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  monto_esperado: number;
+
   @ApiProperty({ example: 1550.00, description: 'Efectivo físico entregado por el cajero' })
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   monto_final_real: number;
 
+  @ApiProperty({ example: 1550.00, description: 'Conteo físico real reportado por el cajero' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  monto_real_fisico: number;
+
   @ApiProperty({ example: -0.50, description: 'Sobrante o faltante de dinero' })
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   diferencia: number;
+
+  @ApiProperty({ example: -0.50, description: 'Diferencia: monto_real_fisico - monto_esperado' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  monto_diferencia: number;
+
+  @ApiProperty({ example: 'CUADRADO', enum: ['CUADRADO', 'SOBRANTE', 'FALTANTE'], description: 'Estado del arqueo de caja' })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  estado_arqueo: string;
+
+  @ApiProperty({ description: 'Detalle/Desglose completo de planilla de arqueo' })
+  @Column({ type: 'jsonb', nullable: true })
+  desglose_arqueo: any;
+
+  @ApiProperty({ description: 'Observación opcional del cierre de caja' })
+  @Column({ type: 'text', nullable: true })
+  observacion: string;
 
   @ApiProperty({ example: 'ABIERTA', enum: ['ABIERTA', 'CERRADA'] })
   @Column({ name: 'estado_sesion', default: 'ABIERTA' })

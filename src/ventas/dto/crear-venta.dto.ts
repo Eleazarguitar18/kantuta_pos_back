@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, Min, ValidateNested, IsOptional } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, Min, ValidateNested, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum MetodoPago {
   EFECTIVO = 'EFECTIVO',
   QR = 'QR',
-  TRANSFERENCIA = 'TRANSFERENCIA'
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  CUENTA_POR_COBRAR = 'CUENTA_POR_COBRAR',
 }
 
 export class DetalleVentaDto {
@@ -28,6 +29,11 @@ export class CrearVentaDto {
   @ApiProperty({ example: 'EFECTIVO', enum: MetodoPago })
   @IsEnum(MetodoPago)
   metodo_pago: MetodoPago;
+
+  @ApiProperty({ example: 'Juan Pérez', description: 'Nombre o cliente (obligatorio si metodo_pago es CUENTA_POR_COBRAR)', required: false })
+  @IsOptional()
+  @IsString()
+  cliente_nombre?: string;
 
   @ApiProperty({ example: 101, description: 'ID de la sesión de caja activa' })
   @IsInt()
