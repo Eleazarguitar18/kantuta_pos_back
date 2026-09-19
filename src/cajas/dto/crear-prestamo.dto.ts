@@ -23,3 +23,15 @@ export class CrearPrestamoDto {
   @IsNotEmpty()
   id_user_create: number;
 }
+
+export class PagarPrestamoDto {
+  @ApiProperty({ example: 101, description: 'ID de la sesión de caja activa que recibe la devolución' })
+  @IsInt()
+  @IsNotEmpty()
+  id_sesion_caja: number;
+
+  @ApiProperty({ example: 1, description: 'ID del usuario que registra la devolución' })
+  @IsInt()
+  @IsNotEmpty()
+  id_user_update: number;
+}
