@@ -50,6 +50,26 @@ export class CajasController {
     return this.cajasService.getEstadoInventario();
   }
 
+  @Get('historial-descuadres')
+  historialDescuadres(
+    @Query('operador_id') operadorId?: string,
+    @Query('estado') estado?: string,
+  ) {
+    return this.cajasService.getHistorialDescuadres(
+      operadorId && !isNaN(+operadorId) ? +operadorId : undefined,
+      estado,
+    );
+  }
+
+  @Roles('Administrador')
+  @Patch('descuadres/:id/resolver')
+  resolverDescuadre(
+    @Param('id') id: string,
+    @Body() body: { estado_resolucion: string; observacion_resolucion?: string; id_user_update: number },
+  ) {
+    return this.cajasService.resolverDescuadre(+id, body);
+  }
+
   @Get('prestamos/listar')
   findAllPrestamos() {
     return this.cajasService.findAllPrestamos();

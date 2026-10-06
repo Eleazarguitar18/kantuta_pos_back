@@ -98,15 +98,31 @@ export class UsuarioService {
   }
 
   // updates
-  update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
-    const dataToUpdate: any = { ...updateUsuarioDto };
-    if (updateUsuarioDto.id_role) {
-      dataToUpdate.role = { id: updateUsuarioDto.id_role };
-      delete dataToUpdate.id_role;
-    }
-    const data = this.userRepository.update(id, dataToUpdate);
+  async update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['persona', 'role'],
+    });
 
-    return data;
+    if (!user) {
+      throw new NotFoundException(`No existen datos de usuario con ID ${id}`);
+    }
+
+    const { id_role, password, ...rest } = updateUsuarioDto;
+
+    // Si se proporciona una nueva contraseña no vacía, encriptarla con bcrypt
+    if (password && password.trim() !== '') {
+      user.password = await this.encriptar_password(password);
+    }
+
+    // Actualizar relación con el rol si corresponde
+    if (id_role !== undefined) {
+      user.role = id_role ? ({ id: id_role } as any) : null;
+    }
+
+    Object.assign(user, rest);
+
+    return await this.userRepository.save(user);
   }
 
   async remove(id: number) {

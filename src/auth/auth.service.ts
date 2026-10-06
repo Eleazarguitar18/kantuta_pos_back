@@ -95,7 +95,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       username: user.name,
-      roleName: user.role?.nombre || 'user',
+      roleName: user.role?.nombre || (user.role?.id === 1 ? 'Administrador' : 'Operador'),
       roleId: user.role?.id || 2,
     };
     const access_token = await this.jwtService.signAsync(payload, {

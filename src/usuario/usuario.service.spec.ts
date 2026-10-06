@@ -105,6 +105,27 @@ describe('UsuarioService', () => {
     });
   });
 
+  describe('update', () => {
+    it('should update user and hash password if provided', async () => {
+      const existingUser = { id: 1, email: 'old@test.com', password: 'old_hashed_pw' };
+      userRepository.findOne.mockResolvedValue({ ...existingUser });
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new_hashed_pw');
+      userRepository.save.mockImplementation(async (u) => u);
+
+      const result = await service.update(1, { password: 'new_password123', email: 'new@test.com' });
+
+      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 }, relations: ['persona', 'role'] });
+      expect(bcrypt.hash).toHaveBeenCalledWith('new_password123', 10);
+      expect(result.password).toBe('new_hashed_pw');
+      expect(result.email).toBe('new@test.com');
+    });
+
+    it('should throw NotFoundException if user to update does not exist', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+      await expect(service.update(999, { email: 'none@test.com' })).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('remove', () => {
     it('should soft delete user', async () => {
       const user = { id: 1, estado: true };
