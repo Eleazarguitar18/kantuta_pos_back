@@ -99,6 +99,11 @@ export class CrearTransaccionAgenteDto {
   @IsOptional()
   nombreOperador?: string;
 
+  @ApiProperty({ example: 'Ruddy', description: 'Persona que retiró el dinero', required: false })
+  @IsString()
+  @IsOptional()
+  persona_retiro?: string;
+
   // Tipo de movimiento
   @ApiProperty({ example: 'PRESTAMO', required: false })
   @IsString()

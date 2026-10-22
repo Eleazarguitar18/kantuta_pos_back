@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Delete,
+  Patch,
   Query,
   UseGuards,
   UsePipes,
@@ -13,6 +14,9 @@ import {
 import { AgentesService } from './agentes.service';
 import { CrearAgenteDto } from './dto/crear-agente.dto';
 import { CrearTransaccionAgenteDto } from './dto/crear-transaccion-agente.dto';
+import { ActualizarPersonaMovimientoDto } from './dto/actualizar-persona-movimiento.dto';
+import { AjustarCapitalDto } from './dto/ajustar-capital.dto';
+import { RegistrarDevolucionDto } from './dto/registrar-devolucion.dto';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -128,6 +132,34 @@ export class AgentesController {
   })
   registrarTransaccion(@Body() dto: CrearTransaccionAgenteDto) {
     return this.agentesService.registrarTransaccion(dto);
+  }
+
+  @UsePipes(dtoValidationPipe)
+  @Patch('transacciones/:id/persona')
+  @ApiOperation({ summary: 'Editar persona de retiro o devolución de una transacción' })
+  actualizarPersonaMovimiento(
+    @Param('id') id: string,
+    @Body() dto: ActualizarPersonaMovimientoDto,
+  ) {
+    return this.agentesService.actualizarPersonaMovimiento(+id, dto);
+  }
+
+  @UsePipes(dtoValidationPipe)
+  @Patch('transacciones/:id/devolucion')
+  @ApiOperation({ summary: 'Registrar devolución parcial o total vinculada a un retiro' })
+  registrarDevolucion(
+    @Param('id') id: string,
+    @Body() dto: RegistrarDevolucionDto,
+  ) {
+    return this.agentesService.registrarDevolucion(+id, dto);
+  }
+
+  @Roles('Administrador')
+  @UsePipes(dtoValidationPipe)
+  @Patch('bancos/:id/capital')
+  @ApiOperation({ summary: 'Ajustar capital total de un banco/agente' })
+  ajustarCapital(@Param('id') id: string, @Body() dto: AjustarCapitalDto) {
+    return this.agentesService.ajustarCapital(+id, dto);
   }
 
   @Get(':id')

@@ -14,8 +14,12 @@ import {
   CrearTransaccionAgenteDto,
   TipoOperacionAgente,
 } from './dto/crear-transaccion-agente.dto';
+import { ActualizarPersonaMovimientoDto } from './dto/actualizar-persona-movimiento.dto';
+import { AjustarCapitalDto } from './dto/ajustar-capital.dto';
+import { RegistrarDevolucionDto } from './dto/registrar-devolucion.dto';
 import { AppGateway } from 'src/gateway/app.gateway';
 import { AgentesGateway } from './agentes.gateway';
+import { EstadoDevolucionAgente } from './entities/transaccion-agente.entity';
 
 @Injectable()
 export class AgentesService {
@@ -289,7 +293,7 @@ export class AgentesService {
       const montoTotal = Number(agente.monto_total);
       const montoOp = Number(dto.monto);
 
-      let nombreOperador = (dto.nombre_operador || dto.operador_nombre || dto.nombreOperador)?.trim();
+      let nombreOperador = (dto.persona_retiro || dto.nombre_operador || dto.operador_nombre || dto.nombreOperador)?.trim();
 
       if (!nombreOperador && idOperadorFinal) {
         const usuarioEncontrado = await queryRunner.manager.findOne(Usuario, {
@@ -305,6 +309,10 @@ export class AgentesService {
       }
 
       const observacion = motivoFinal;
+      let personaRetiro: string | undefined;
+      let saldoPendienteTransaccion = 0;
+      let estadoDevolucionTransaccion = EstadoDevolucionAgente.NO_APLICA;
+      let fechaRetiro: Date | undefined;
 
       // 2. Procesar según tipo_operacion
       switch (tipoOperacion) {
@@ -339,6 +347,10 @@ export class AgentesService {
           }
 
           montoCuentasPorCobrar += montoOp;
+          personaRetiro = nombreOperador;
+          saldoPendienteTransaccion = montoOp;
+          estadoDevolucionTransaccion = EstadoDevolucionAgente.PENDIENTE;
+          fechaRetiro = new Date();
 
           // Registrar o actualizar deuda del operador para este banco específico
           let deudaOperador = await queryRunner.manager.findOne(OperadorDeuda, {
@@ -535,6 +547,10 @@ export class AgentesService {
         origen: origen || 'NO_DEFINIDO',
         destino: destino || 'NO_DEFINIDO',
         nombre_operador: nombreOperador || undefined,
+        persona_retiro: personaRetiro,
+        fecha_retiro: fechaRetiro,
+        saldo_pendiente: saldoPendienteTransaccion,
+        estado_devolucion: estadoDevolucionTransaccion,
         descripcion: observacion || undefined,
         banco: dto.banco || agente.nombre_banco,
         comision_cliente: Number(dto.comision_cliente || 0),
@@ -600,6 +616,302 @@ export class AgentesService {
     } catch (error) {
       console.error('Error al obtener transacciones por banco:', error);
       return [];
+    }
+  }
+
+  async actualizarPersonaMovimiento(
+    id: number,
+    dto: ActualizarPersonaMovimientoDto,
+  ): Promise<TransaccionAgente> {
+    const transaccion = await this.transaccionAgenteRepository.findOne({
+      where: { id, estado: true },
+    });
+
+    if (!transaccion) {
+      throw new NotFoundException(`Transacción con ID ${id} no encontrada`);
+    }
+
+    if (dto.persona_retiro === undefined && dto.persona_devolucion === undefined) {
+      throw new BadRequestException(
+        'Debe enviar persona_retiro o persona_devolucion para actualizar.',
+      );
+    }
+
+    if (dto.persona_retiro !== undefined) {
+      const personaRetiro = dto.persona_retiro.trim();
+      if (!personaRetiro) {
+        throw new BadRequestException('La persona que retiró no puede estar vacía.');
+      }
+      transaccion.persona_retiro = personaRetiro;
+      transaccion.nombre_operador = personaRetiro;
+    }
+
+    if (dto.persona_devolucion !== undefined) {
+      const personaDevolucion = dto.persona_devolucion.trim();
+      if (!personaDevolucion) {
+        throw new BadRequestException('La persona que devolvió no puede estar vacía.');
+      }
+      transaccion.persona_devolucion = personaDevolucion;
+    }
+
+    transaccion.id_user_update = dto.id_user_update;
+    const actualizado = await this.transaccionAgenteRepository.save(transaccion);
+
+    this.appGateway.notifyDataChange('agentes', 'persona_movimiento_actualizada');
+    return actualizado;
+  }
+
+  async registrarDevolucion(
+    id: number,
+    dto: RegistrarDevolucionDto,
+  ): Promise<TransaccionAgente> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const transaccion = await queryRunner.manager.findOne(TransaccionAgente, {
+        where: { id, estado: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!transaccion) {
+        throw new NotFoundException(`Transacción con ID ${id} no encontrada`);
+      }
+
+      if (transaccion.estado_devolucion === EstadoDevolucionAgente.NO_APLICA) {
+        throw new BadRequestException(
+          'La transacción no tiene devolución pendiente asociada.',
+        );
+      }
+
+      if (transaccion.estado_devolucion === EstadoDevolucionAgente.COMPLETO) {
+        throw new BadRequestException('La devolución de esta transacción ya está completa.');
+      }
+
+      const montoDevolucion = Number(dto.monto);
+      const saldoPendiente = Number(transaccion.saldo_pendiente ?? 0);
+
+      if (montoDevolucion <= 0) {
+        throw new BadRequestException('El monto de devolución debe ser mayor a cero.');
+      }
+
+      if (montoDevolucion > saldoPendiente) {
+        throw new BadRequestException(
+          `El monto de devolución (${montoDevolucion.toFixed(2)}) supera el saldo pendiente (${saldoPendiente.toFixed(2)} Bs).`,
+        );
+      }
+
+      const agente = await queryRunner.manager.findOne(Agente, {
+        where: { id: transaccion.id_agente, estado: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!agente) {
+        throw new NotFoundException(
+          `Banco/Agente con ID ${transaccion.id_agente} no encontrado o inactivo`,
+        );
+      }
+
+      const destino = (dto.destino || 'EFECTIVO').toUpperCase();
+      let montoEfectivo = Number(agente.monto_efectivo);
+      let montoBanco = Number(agente.monto_banco);
+      let montoCuentasPorCobrar = Number(agente.monto_cuentas_por_cobrar);
+      const montoTotal = Number(agente.monto_total);
+
+      montoCuentasPorCobrar -= montoDevolucion;
+
+      if (destino === 'EFECTIVO') {
+        montoEfectivo += montoDevolucion;
+      } else if (destino === 'BANCO') {
+        montoBanco += montoDevolucion;
+      } else {
+        throw new BadRequestException('El destino de la devolución debe ser EFECTIVO o BANCO.');
+      }
+
+      const sumaCalculada = Math.round((montoEfectivo + montoBanco + montoCuentasPorCobrar) * 100) / 100;
+      const sumaEsperada = Math.round(montoTotal * 100) / 100;
+
+      if (Math.abs(sumaCalculada - sumaEsperada) > 0.01) {
+        throw new BadRequestException(
+          `Violación del Principio de Conservación de Capital para ${agente.nombre_banco}: La suma (${sumaCalculada} Bs) no coincide con el Capital Total (${sumaEsperada} Bs).`,
+        );
+      }
+
+      agente.monto_efectivo = montoEfectivo;
+      agente.monto_banco = montoBanco;
+      agente.monto_cuentas_por_cobrar = montoCuentasPorCobrar;
+      agente.id_user_update = dto.id_user_create;
+      await queryRunner.manager.save(agente);
+
+      const nuevoSaldoPendiente = Number((saldoPendiente - montoDevolucion).toFixed(2));
+      transaccion.saldo_pendiente = nuevoSaldoPendiente;
+      transaccion.persona_devolucion = dto.persona_devolucion.trim();
+      transaccion.id_user_update = dto.id_user_create;
+
+      if (nuevoSaldoPendiente <= 0.001) {
+        transaccion.saldo_pendiente = 0;
+        transaccion.estado_devolucion = EstadoDevolucionAgente.COMPLETO;
+        transaccion.fecha_devolucion = new Date();
+      } else {
+        transaccion.estado_devolucion = EstadoDevolucionAgente.PENDIENTE;
+      }
+
+      const actualizado = await queryRunner.manager.save(transaccion);
+
+      const deudaOperador = await queryRunner.manager.findOne(OperadorDeuda, {
+        where: {
+          id_agente: agente.id,
+          nombre_operador: transaccion.persona_retiro || transaccion.nombre_operador,
+          estado_deuda: 'PENDIENTE',
+          estado: true,
+        },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (deudaOperador) {
+        deudaOperador.monto_pendiente = Math.max(
+          0,
+          Number(deudaOperador.monto_pendiente) - montoDevolucion,
+        );
+        deudaOperador.id_user_update = dto.id_user_create;
+        if (Number(deudaOperador.monto_pendiente) <= 0.001) {
+          deudaOperador.monto_pendiente = 0;
+          deudaOperador.estado_deuda = 'PAGADO';
+          deudaOperador.fecha_pago = new Date();
+        }
+        await queryRunner.manager.save(deudaOperador);
+      }
+
+      const devolucion = queryRunner.manager.create(TransaccionAgente, {
+        id_agente: agente.id,
+        tipo_operacion: TipoOperacionAgente.PAGO_OPERADOR,
+        monto: montoDevolucion,
+        origen: 'CUENTAS_POR_COBRAR',
+        destino,
+        nombre_operador: transaccion.persona_retiro || transaccion.nombre_operador,
+        persona_devolucion: dto.persona_devolucion.trim(),
+        saldo_pendiente: nuevoSaldoPendiente,
+        estado_devolucion: EstadoDevolucionAgente.NO_APLICA,
+        descripcion:
+          dto.descripcion ||
+          `Devolución vinculada a transacción #${transaccion.id}`,
+        banco: agente.nombre_banco,
+        id_usuario: dto.id_user_create,
+        id_user_create: dto.id_user_create,
+      });
+      await queryRunner.manager.save(devolucion);
+
+      await queryRunner.commitTransaction();
+
+      this.agentesGateway.emitAgenteActualizado({ agente, transaccion: actualizado });
+      this.appGateway.notifyDataChange('agentes', 'devolucion_registrada');
+
+      return actualizado;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async ajustarCapital(
+    id: number,
+    dto: AjustarCapitalDto,
+  ): Promise<{ success: boolean; message: string; data: Agente }> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const agente = await queryRunner.manager.findOne(Agente, {
+        where: { id, estado: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!agente) {
+        throw new NotFoundException(`Banco/Agente con ID ${id} no encontrado o inactivo`);
+      }
+
+      const nuevoCapital = Number(dto.monto_total);
+      if (nuevoCapital < 0) {
+        throw new BadRequestException('El capital total no puede ser negativo.');
+      }
+
+      const capitalAnterior = Number(agente.monto_total);
+      const diferencia = Number((nuevoCapital - capitalAnterior).toFixed(2));
+      const destinoAjuste = (dto.destino_ajuste || 'BANCO').toUpperCase();
+
+      if (destinoAjuste === 'EFECTIVO') {
+        const nuevoEfectivo = Number(agente.monto_efectivo) + diferencia;
+        if (nuevoEfectivo < 0) {
+          throw new BadRequestException(
+            'El ajuste dejaría el efectivo del banco/agente en negativo.',
+          );
+        }
+        agente.monto_efectivo = nuevoEfectivo;
+      } else if (destinoAjuste === 'BANCO') {
+        const nuevoBanco = Number(agente.monto_banco) + diferencia;
+        if (nuevoBanco < 0) {
+          throw new BadRequestException(
+            'El ajuste dejaría el saldo bancario del banco/agente en negativo.',
+          );
+        }
+        agente.monto_banco = nuevoBanco;
+      } else {
+        throw new BadRequestException('El destino del ajuste debe ser EFECTIVO o BANCO.');
+      }
+
+      agente.monto_total = nuevoCapital;
+      agente.id_user_update = dto.id_admin;
+
+      const sumaCalculada = Number(
+        (
+          Number(agente.monto_efectivo) +
+          Number(agente.monto_banco) +
+          Number(agente.monto_cuentas_por_cobrar)
+        ).toFixed(2),
+      );
+
+      if (Math.abs(sumaCalculada - nuevoCapital) > 0.01) {
+        throw new BadRequestException(
+          `El ajuste no conserva el capital: componentes ${sumaCalculada} Bs vs capital ${nuevoCapital} Bs.`,
+        );
+      }
+
+      const guardado = await queryRunner.manager.save(agente);
+
+      const auditoria = queryRunner.manager.create(TransaccionAgente, {
+        id_agente: agente.id,
+        tipo_operacion: TipoOperacionAgente.TRANSFERENCIA_INTERNA,
+        monto: Math.abs(diferencia),
+        origen: diferencia >= 0 ? 'AJUSTE_ADMINISTRATIVO' : destinoAjuste,
+        destino: diferencia >= 0 ? destinoAjuste : 'AJUSTE_ADMINISTRATIVO',
+        descripcion: `[Ajuste capital total] ${dto.motivo}. Capital anterior: ${capitalAnterior.toFixed(2)} Bs, nuevo capital: ${nuevoCapital.toFixed(2)} Bs.`,
+        banco: agente.nombre_banco,
+        saldo_pendiente: 0,
+        estado_devolucion: EstadoDevolucionAgente.NO_APLICA,
+        id_usuario: dto.id_admin,
+        id_user_create: dto.id_admin,
+      });
+      await queryRunner.manager.save(auditoria);
+
+      await queryRunner.commitTransaction();
+
+      this.agentesGateway.emitAgenteActualizado({ agente: guardado, transaccion: auditoria });
+      this.appGateway.notifyDataChange('agentes', 'capital_ajustado');
+
+      return {
+        success: true,
+        message: 'Capital total ajustado correctamente',
+        data: guardado,
+      };
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
   }
 

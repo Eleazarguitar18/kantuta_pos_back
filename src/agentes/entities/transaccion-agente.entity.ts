@@ -4,6 +4,12 @@ import { BaseEntityAudit } from 'src/common/entities/base-entity.audit';
 import { SesionCaja } from 'src/cajas/entities/sesion-caja.entity';
 import { Agente } from './agente.entity';
 
+export enum EstadoDevolucionAgente {
+  COMPLETO = 'COMPLETO',
+  PENDIENTE = 'PENDIENTE',
+  NO_APLICA = 'NO_APLICA',
+}
+
 @Entity('transacciones_agente')
 export class TransaccionAgente extends BaseEntityAudit {
   @ApiProperty({ example: 1 })
@@ -60,6 +66,38 @@ export class TransaccionAgente extends BaseEntityAudit {
   @ApiProperty({ example: 'Ruddy', description: 'Nombre del operador involucrado (para préstamos/pagos)' })
   @Column({ nullable: true })
   nombre_operador: string;
+
+  @ApiProperty({ example: 'Ruddy', description: 'Persona que retiró el dinero', required: false })
+  @Column({ nullable: true })
+  persona_retiro: string;
+
+  @ApiProperty({ example: 'María', description: 'Persona que devolvió el dinero', required: false })
+  @Column({ nullable: true })
+  persona_devolucion: string;
+
+  @ApiProperty({ description: 'Fecha en que se retiró el dinero', required: false })
+  @Column({ type: 'timestamp', nullable: true })
+  fecha_retiro: Date;
+
+  @ApiProperty({ description: 'Fecha en que se completó la devolución', required: false })
+  @Column({ type: 'timestamp', nullable: true })
+  fecha_devolucion: Date;
+
+  @ApiProperty({ example: 100.0, description: 'Monto pendiente de devolución' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  saldo_pendiente: number;
+
+  @ApiProperty({
+    example: EstadoDevolucionAgente.PENDIENTE,
+    enum: EstadoDevolucionAgente,
+    description: 'Estado de devolución del retiro vinculado',
+  })
+  @Column({
+    type: 'enum',
+    enum: EstadoDevolucionAgente,
+    default: EstadoDevolucionAgente.NO_APLICA,
+  })
+  estado_devolucion: EstadoDevolucionAgente;
 
   @ApiProperty({ example: 'Préstamo para cambio', description: 'Descripción o motivo del movimiento' })
   @Column({ type: 'text', nullable: true })
