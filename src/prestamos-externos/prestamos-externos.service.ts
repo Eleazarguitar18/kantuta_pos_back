@@ -35,10 +35,19 @@ export class PrestamosExternosService {
       caja_sesion_id,
       solicitante_externo,
       autorizador_id,
+      id_autorizador,
       monto,
       motivo,
       id_user_create,
     } = crearPrestamoExternoDto;
+
+    // Compatibilidad: el frontend puede enviar id_autorizador o autorizador_id
+    const autorizadorId = autorizador_id ?? id_autorizador;
+    if (!autorizadorId) {
+      throw new BadRequestException(
+        'Debe indicar el usuario que autoriza el préstamo externo',
+      );
+    }
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -51,17 +60,38 @@ export class PrestamosExternosService {
       }
 
       const autorizador = await queryRunner.manager.findOne(Usuario, {
-        where: { id: autorizador_id, estado: true },
+        where: { id: autorizadorId, estado: true },
       });
 
       if (!autorizador) {
         throw new NotFoundException(
-          `Usuario autorizador con ID ${autorizador_id} no encontrado o inactivo`,
+          `Usuario autorizador con ID ${autorizadorId} no encontrado o inactivo`,
         );
       }
 
+      // Si no llega la sesión, usamos la sesión abierta del usuario que registra
+      let idSesionCaja = caja_sesion_id;
+      if (!idSesionCaja) {
+        const sesionAbierta = await queryRunner.manager.findOne(SesionCaja, {
+          where: {
+            id_usuario: id_user_create,
+            estado: true,
+            estado_sesion: 'ABIERTA',
+          },
+          order: { id: 'DESC' },
+        });
+
+        if (!sesionAbierta) {
+          throw new BadRequestException(
+            'No hay una sesión de caja abierta para el usuario que registra el préstamo externo',
+          );
+        }
+
+        idSesionCaja = sesionAbierta.id;
+      }
+
       const sesion = await queryRunner.manager.findOne(SesionCaja, {
-        where: { id: caja_sesion_id, estado: true },
+        where: { id: idSesionCaja, estado: true },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -93,7 +123,7 @@ export class PrestamosExternosService {
       await queryRunner.manager.save(caja);
 
       const movimiento = queryRunner.manager.create(MovimientoCaja, {
-        id_sesion_caja: caja_sesion_id,
+        id_sesion_caja: idSesionCaja,
         monto: montoPrestamo,
         tipo: 'EGRESO',
         motivo: `[Préstamo externo] ${solicitante_externo}: ${motivo}`,
@@ -102,9 +132,9 @@ export class PrestamosExternosService {
       await queryRunner.manager.save(movimiento);
 
       const prestamo = queryRunner.manager.create(PrestamoExterno, {
-        caja_sesion_id,
+        caja_sesion_id: idSesionCaja,
         solicitante_externo,
-        autorizador_id,
+        autorizador_id: autorizadorId,
         monto: montoPrestamo,
         motivo,
         estado: EstadoPrestamoExterno.PENDIENTE,

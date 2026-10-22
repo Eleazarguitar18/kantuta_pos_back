@@ -21,6 +21,7 @@ import { AgentesModule } from './agentes/agentes.module';
 import { ComprasModule } from './compras/compras.module';
 import { RecargasModule } from './recargas/recargas.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { PrestamosExternosModule } from './prestamos-externos/prestamos-externos.module';
 
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { GeminiModule } from './gemini/gemini.module';
@@ -50,6 +51,7 @@ import { GatewayModule } from './gateway/gateway.module';
     ComprasModule,
     RecargasModule,
     ReportesModule,
+    PrestamosExternosModule,
     WhatsappModule,
     GeminiModule,
     AiAssistantModule,

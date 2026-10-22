@@ -15,6 +15,7 @@ import { AuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ActualizarEstadoPrestamoDto } from './dto/actualizar-estado-prestamo.dto';
 import { CrearPrestamoExternoDto } from './dto/crear-prestamo-externo.dto';
+import { PagarPrestamoExternoDto } from './dto/pagar-prestamo-externo.dto';
 import { EstadoPrestamoExterno } from './entities/prestamo-externo.entity';
 import { PrestamosExternosService } from './prestamos-externos.service';
 
@@ -47,6 +48,22 @@ export class PrestamosExternosController {
     @Query('solicitante') solicitante?: string,
   ) {
     return this.prestamosExternosService.listar(estado, solicitante);
+  }
+
+  @UsePipes(dtoValidationPipe)
+  @Post(':id/pagar')
+  @ApiOperation({
+    summary: 'Registrar la devolución de un préstamo externo (alias de estado PAGADO)',
+  })
+  pagar(
+    @Param('id') id: string,
+    @Body() pagarPrestamoExternoDto: PagarPrestamoExternoDto,
+  ) {
+    return this.prestamosExternosService.actualizarEstado(+id, {
+      estado: EstadoPrestamoExterno.PAGADO,
+      id_user_update: pagarPrestamoExternoDto.id_user_update,
+      caja_sesion_id: pagarPrestamoExternoDto.caja_sesion_id,
+    });
   }
 
   @UsePipes(dtoValidationPipe)

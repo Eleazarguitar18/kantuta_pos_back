@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Usuario } from './entities/usuario.entity';
 import { PersonaService } from 'src/persona/persona.service';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -79,11 +79,48 @@ export class UsuarioService {
   }
 
   async findAll() {
-    const data = await this.userRepository.find();
+    // Incluimos persona y rol para que el frontend pueda mostrarlos en las tablas
+    const data = await this.userRepository.find({
+      where: { estado: true },
+      relations: ['persona', 'role'],
+      order: { id: 'ASC' },
+    });
     if (data.length === 0) {
       throw new NotFoundException(`No existen datos de usuarios`);
     }
     return data;
+  }
+
+  /**
+   * Lista los usuarios activos que pueden autorizar operaciones (préstamos, etc.).
+   * Se devuelve un arreglo plano para facilitar su consumo en selectores.
+   */
+  async findAutorizadores() {
+    const usuarios = await this.userRepository.find({
+      where: {
+        estado: true,
+        role: { nombre: In(['Administrador', 'Operador']) },
+      },
+      relations: ['persona', 'role'],
+      order: { id: 'ASC' },
+    });
+
+    return usuarios.map((usuario) => ({
+      id: usuario.id,
+      name: usuario.name,
+      email: usuario.email,
+      estado: usuario.estado,
+      persona: usuario.persona
+        ? {
+            nombres: usuario.persona.nombres,
+            p_apellido: usuario.persona.p_apellido,
+            s_apellido: usuario.persona.s_apellido,
+          }
+        : null,
+      role: usuario.role
+        ? { id: usuario.role.id, nombre: usuario.role.nombre }
+        : null,
+    }));
   }
 
   findOne(id: number) {

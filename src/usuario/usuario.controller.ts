@@ -35,6 +35,11 @@ export class UsuarioController {
     return data;
   }
 
+  @Get('autorizadores')
+  async findAutorizadores() {
+    return this.usuarioService.findAutorizadores();
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const data = await this.usuarioService.findOne(+id);
