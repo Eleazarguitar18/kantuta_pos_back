@@ -233,8 +233,11 @@ export class VentasService {
   async obtenerResumenVentasPorRango(queryDto: GetReporteVentasDto) {
     const { fechaInicio, fechaFin } = queryDto;
 
-    const inicio = new Date(`${fechaInicio}T00:00:00.000Z`);
-    const fin = new Date(`${fechaFin}T23:59:59.999Z`);
+    const inicio = new Date(fechaInicio);
+    inicio.setHours(0, 0, 0, 0);
+
+    const fin = new Date(fechaFin);
+    fin.setHours(23, 59, 59, 999);
 
     if (inicio > fin) {
       throw new BadRequestException(
@@ -242,12 +245,13 @@ export class VentasService {
       );
     }
 
-    // Buscamos las ventas cargando las relaciones si fueran necesarias
+    // Buscamos las ventas cargando el detalle de productos para el PDF
     const ventas = await this.ventaRepository.find({
       where: {
-        created_at: Between(inicio, fin),
+        fecha: Between(inicio, fin),
         estado: true, // Tu borrado lógico/auditoría
       },
+      relations: ['detalles', 'detalles.producto'],
       order: { id: 'DESC' }, // Listar de las más recientes a las más antiguas
     });
 
@@ -287,10 +291,21 @@ export class VentasService {
       // 👇 RETORNAMOS EL ARREGLO COMPLETO PARA LA TABLA DEL PDF
       ventas: ventas.map((v) => ({
         id: v.id,
-        fecha: v.created_at,
+        fecha: v.fecha,
         total: Number(v.total),
         metodo_pago: v.metodo_pago,
         estado_venta: v.estado_venta,
+        detalles: (v.detalles || [])
+          .filter((d) => d.estado !== false)
+          .map((d) => ({
+            id_producto: d.id_producto,
+            nombre:
+              d.producto?.nombre?.trim() ||
+              `Producto eliminado #${d.id_producto}`,
+            cantidad: Number(d.cantidad),
+            precio_unitario: Number(d.precio_unitario),
+            subtotal: Number(d.subtotal),
+          })),
       })),
     };
   }

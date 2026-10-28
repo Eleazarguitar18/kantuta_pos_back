@@ -275,6 +275,7 @@ export class ReportesService {
         fecha: Between(start, end),
         estado: true,
       },
+      relations: ['detalles', 'detalles.producto'],
       order: { fecha: 'DESC' },
     });
 
@@ -297,6 +298,17 @@ export class ReportesService {
         total: t,
         metodo_pago: v.metodo_pago,
         estado_venta: v.estado_venta,
+        detalles: (v.detalles || [])
+          .filter((d) => d.estado !== false)
+          .map((d) => ({
+            id_producto: d.id_producto,
+            nombre:
+              d.producto?.nombre?.trim() ||
+              `Producto eliminado #${d.id_producto}`,
+            cantidad: Number(d.cantidad),
+            precio_unitario: Number(d.precio_unitario),
+            subtotal: Number(d.subtotal),
+          })),
       };
     });
 
@@ -368,6 +380,7 @@ export class ReportesService {
         fecha: Between(start, end),
         estado: true,
       },
+      relations: ['detalles', 'detalles.producto'],
       order: { fecha: 'DESC' },
     });
 
@@ -384,6 +397,17 @@ export class ReportesService {
         proveedor: c.proveedor || 'Sin Proveedor',
         pagado_con_caja: c.pagado_con_caja,
         total: Number(c.total),
+        detalles: (c.detalles || [])
+          .filter((d) => d.estado !== false)
+          .map((d) => ({
+            id_producto: d.id_producto,
+            nombre:
+              d.producto?.nombre?.trim() ||
+              `Producto eliminado #${d.id_producto}`,
+            cantidad: Number(d.cantidad),
+            costo_unitario: Number(d.costo_unitario),
+            subtotal: Number(d.subtotal),
+          })),
       })),
       totalInvertido: totalCompras,
     };
@@ -457,12 +481,17 @@ export class ReportesService {
       cajero: nombreUsuario,
       metodo_pago: venta.metodo_pago,
       estado_venta: venta.estado_venta,
-      detalles: venta.detalles.map((d) => ({
-        nombre: d.producto?.nombre || 'Producto',
-        cantidad: d.cantidad,
-        precio_unitario: Number(d.precio_unitario),
-        subtotal: Number(d.subtotal),
-      })),
+      detalles: (venta.detalles || [])
+        .filter((d) => d.estado !== false)
+        .map((d) => ({
+          id_producto: d.id_producto,
+          nombre:
+            d.producto?.nombre?.trim() ||
+            `Producto eliminado #${d.id_producto}`,
+          cantidad: Number(d.cantidad),
+          precio_unitario: Number(d.precio_unitario),
+          subtotal: Number(d.subtotal),
+        })),
       total: Number(venta.total),
     };
   }
