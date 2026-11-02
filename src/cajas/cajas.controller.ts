@@ -22,6 +22,7 @@ import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
 import { CrearPrestamoDto, PagarPrestamoDto } from './dto/crear-prestamo.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
+import { ResolverDescuadreDto } from './dto/resolver-descuadre.dto';
 
 // Validación de DTO en el controlador antes de procesar la petición
 const dtoValidationPipe = new ValidationPipe({
@@ -65,7 +66,7 @@ export class CajasController {
   @Patch('descuadres/:id/resolver')
   resolverDescuadre(
     @Param('id') id: string,
-    @Body() body: { estado_resolucion: string; observacion_resolucion?: string; id_user_update: number },
+    @Body() body: ResolverDescuadreDto,
   ) {
     return this.cajasService.resolverDescuadre(+id, body);
   }

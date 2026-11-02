@@ -1,12 +1,61 @@
-import { Controller, Get, Query, Param, Res, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Param,
+  Res,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { ReportesService } from '../services/reportes.service';
+import { MatrizControlService } from '../services/matriz-control.service';
+import { MatrizControlExcelService } from '../services/matriz-control-excel.service';
+import { FiltroMatrizControlDto } from '../dto/filtro-matriz-control.dto';
+import { AuthGuard } from 'src/auth/guards/auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
 @ApiTags('reportes')
 @Controller('reportes')
 export class ReportesController {
-  constructor(private readonly reportesService: ReportesService) {}
+  constructor(
+    private readonly reportesService: ReportesService,
+    private readonly matrizControlService: MatrizControlService,
+    private readonly matrizControlExcelService: MatrizControlExcelService,
+  ) {}
+
+  @Get('matriz-control')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Administrador')
+  @ApiOperation({
+    summary: 'Obtener la matriz mensual de control diario por operador',
+  })
+  async getMatrizControl(@Query() filtro: FiltroMatrizControlDto) {
+    return this.matrizControlService.obtenerMatriz(filtro);
+  }
+
+  @Get('matriz-control/excel')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Administrador')
+  @ApiOperation({
+    summary: 'Descargar la matriz mensual de control diario en Excel',
+  })
+  async getMatrizControlExcel(
+    @Query() filtro: FiltroMatrizControlDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.matrizControlExcelService.generarExcel(filtro);
+    const filename = `matriz-control-${filtro.anio}-${String(filtro.mes).padStart(2, '0')}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.send(buffer);
+  }
 
   @Get('dashboard-stats')
   @ApiOperation({ summary: 'Obtener estadísticas consolidadas de ventas, recargas, stock y KPIs para el dashboard' })

@@ -66,6 +66,14 @@ export class PrestamoExterno {
   @Column({ type: 'timestamp', nullable: true })
   fecha_devolucion: Date | null;
 
+  @ApiProperty({
+    example: 101,
+    description: 'Sesión de caja donde se recibió la devolución',
+    required: false,
+  })
+  @Column({ name: 'id_sesion_devolucion', type: 'int', nullable: true })
+  id_sesion_devolucion: number | null;
+
   @ApiProperty({ example: 1, description: 'ID del usuario que registró el préstamo', required: false })
   @Column({ nullable: true })
   id_user_create: number;

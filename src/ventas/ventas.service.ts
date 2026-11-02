@@ -366,6 +366,7 @@ export class VentasService {
       cuenta.estado_cuenta = 'PAGADO';
       cuenta.fecha_pago = new Date();
       cuenta.metodo_pago_cancelacion = metodo_pago;
+      cuenta.id_sesion_pago = id_sesion_caja;
       cuenta.id_user_update = id_user_update;
 
       const cuentaActualizada = await queryRunner.manager.save(CuentaPorCobrar, cuenta);

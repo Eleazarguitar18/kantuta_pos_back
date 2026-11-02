@@ -242,10 +242,12 @@ export class PrestamosExternosService {
         await queryRunner.manager.save(movimiento);
 
         prestamo.fecha_devolucion = new Date();
+        prestamo.id_sesion_devolucion = idSesionDevolucion;
       }
 
       if (estado === EstadoPrestamoExterno.PENDIENTE) {
         prestamo.fecha_devolucion = null;
+        prestamo.id_sesion_devolucion = null;
       }
 
       prestamo.estado = estado;
