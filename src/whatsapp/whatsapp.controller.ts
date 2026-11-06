@@ -40,26 +40,44 @@ export class WhatsappController {
       'Renderiza el código QR actual de Baileys para vincular tu dispositivo móvil.',
   })
   async renderQrPagev2(@Res() res: express.Response) {
-    const qrImage = await this.whatsappService.obtenerQrHtml();
+    const estado = await this.whatsappService.obtenerEstado();
 
-    if (!qrImage) {
-      return res.send(`
-        <div style="text-align: center; font-family: sans-serif; margin-top: 50px;">
-            <h2>✅ WhatsApp está conectado o el código se está generando...</h2>
-        </div>
+    if (!estado.qrBase64) {
+      res.type('html').send(`
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="refresh" content="60">
+          <title>Estado de WhatsApp</title>
+        </head>
+        <body style="text-align: center; font-family: sans-serif; margin-top: 50px; padding: 20px;">
+            <h2>${estado.mensaje}</h2>
+            <p style="color: #667781;">Esta página se actualiza automáticamente cada 60 segundos.</p>
+        </body>
+        </html>
       `);
+      return;
     }
 
-    return res.send(`
+    res.type('html').send(`
       <html lang="es">
-      <body style="font-family: sans-serif; text-align: center; background-color: #f0f2f5; padding-top: 50px;">
-          <div style="background: white; display: inline-block; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-              <h1 style="color: #128C7E;">Vincular NestJS API</h1>
-              <img src="${qrImage}" style="width: 300px; height: 300px;"/>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="refresh" content="60">
+        <title>Vincular WhatsApp</title>
+      </head>
+      <body style="font-family: sans-serif; text-align: center; background-color: #f0f2f5; padding: 24px;">
+          <div style="background: white; display: inline-block; padding: 24px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 100%; box-sizing: border-box;">
+              <h1 style="color: #128C7E; font-size: clamp(20px, 5vw, 28px);">Vincular WhatsApp</h1>
+              <img src="${estado.qrBase64}" alt="Código QR de WhatsApp" style="width: min(80vw, 420px); height: auto; aspect-ratio: 1 / 1; object-fit: contain; display: block; margin: 0 auto;"/>
+              <p style="color: #667781; font-size: 14px;">Escanea el código desde WhatsApp. Se actualiza automáticamente cada 60 segundos.</p>
           </div>
       </body>
       </html>
     `);
+    return;
   }
 
   @Get('connect')
@@ -68,21 +86,60 @@ export class WhatsappController {
     description: 'Renderiza el código QR en Base64 o un mensaje de éxito.',
   })
   async renderQrPage() {
-    const qrImage = await this.whatsappService.obtenerQrHtml();
+    return this.whatsappService.obtenerEstado();
+  }
 
-    if (!qrImage) {
-      return {
-        success: true,
-        message:
-          'WhatsApp ya está vinculado o el código se está generando de fondo...',
-      };
-    }
+  @Get('status')
+  @ApiOperation({
+    summary: 'Estado de la sesión de WhatsApp',
+    description:
+      'Devuelve el estado real de la conexión, el QR vigente y los datos del dispositivo vinculado.',
+  })
+  async getStatus() {
+    return this.whatsappService.obtenerEstado();
+  }
 
-    // Si quieres retornar un JSON limpio en lugar de HTML embebido (Ideal para tu Frontend)
-    return {
-      success: true,
-      qrBase64: qrImage,
-    };
+  @Get('qr')
+  @ApiOperation({
+    summary: 'Obtener el código QR vigente',
+    description:
+      'Devuelve el QR actual y el estado de la conexión para refrescarlo periódicamente.',
+  })
+  async getQr() {
+    return this.whatsappService.obtenerEstado();
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cerrar la sesión de WhatsApp',
+    description:
+      'Desvincula el dispositivo, elimina las credenciales locales y genera un nuevo QR.',
+  })
+  async logout() {
+    return this.whatsappService.cerrarSesionWhatsapp();
+  }
+
+  @Post('session/reset')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Limpiar una sesión defectuosa',
+    description:
+      'Fuerza el cierre del socket, elimina toda la carpeta de autenticación y genera una sesión nueva.',
+  })
+  async resetSession() {
+    return this.whatsappService.reiniciarSesionWhatsapp();
+  }
+
+  @Post('disconnect')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Desvincular WhatsApp (compatibilidad)',
+    description:
+      'Alias de cierre de sesión para la pantalla antigua de vinculación.',
+  })
+  async disconnect() {
+    return this.whatsappService.cerrarSesionWhatsapp();
   }
   @Public()
   @Post('send')

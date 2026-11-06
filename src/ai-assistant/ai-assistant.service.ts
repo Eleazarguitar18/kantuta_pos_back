@@ -10,9 +10,8 @@ export class AiAssistantService {
   private openai: OpenAI;
   private systemInstruction: string;
   private readonly logger = new Logger(AiAssistantService.name);
-
-  // 1. Cambiamos a un modelo optimizado para respuestas rápidas sin reasoning obligatorio
-  private readonly MODELO_IA = 'groq/compound';
+  private readonly modeloPrincipal: string;
+  private readonly modeloFallback: string;
 
   constructor(
     private readonly reportesService: ReportesService,
@@ -23,6 +22,14 @@ export class AiAssistantService {
     if (!apiKey) {
       this.logger.error('❌ CRÍTICO: GROQ_API_KEY no fue encontrada en las variables de entorno.');
     }
+
+    this.modeloPrincipal =
+      this.configService.get<string>('GROQ_MODEL') || 'qwen/qwen3.8-27b';
+    this.modeloFallback =
+      this.configService.get<string>('GROQ_MODEL_FALLBACK') || 'openai/gpt-oss-20b';
+    this.logger.log(
+      `[IA] Modelo principal: ${this.modeloPrincipal} | fallback: ${this.modeloFallback}`,
+    );
 
     this.openai = new OpenAI({
       baseURL: 'https://api.groq.com/openai/v1',
@@ -38,13 +45,63 @@ export class AiAssistantService {
     }
   }
 
+  private async crearCompletacion(params: {
+    descripcion: string;
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    temperature: number;
+    maxCompletionTokens: number;
+    fallbackMaxCompletionTokens: number;
+  }): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+    const modelos = Array.from(
+      new Set([this.modeloPrincipal, this.modeloFallback].filter(Boolean)),
+    );
+    let ultimoError: any;
+
+    for (const [indice, modelo] of modelos.entries()) {
+      const esFallback = indice > 0;
+      const payload: any = {
+        model: modelo,
+        messages: params.messages,
+        temperature: params.temperature,
+        max_completion_tokens: esFallback
+          ? params.fallbackMaxCompletionTokens
+          : params.maxCompletionTokens,
+      };
+
+      if (modelo.includes('qwen')) {
+        payload.reasoning_effort = 'none';
+      } else if (modelo.includes('gpt-oss')) {
+        payload.reasoning_effort = 'low';
+      }
+
+      try {
+        return await this.openai.chat.completions.create(payload);
+      } catch (error: any) {
+        ultimoError = error;
+        const status = error?.status ?? error?.response?.status;
+        const detalle =
+          error?.error?.message || error?.message || 'Error desconocido';
+
+        this.logger.warn(
+          `[IA] Falló ${params.descripcion} con ${modelo} (status=${status ?? 'N/A'}): ${detalle}`,
+        );
+
+        if (![404, 429, 503].includes(Number(status))) {
+          throw error;
+        }
+      }
+    }
+
+    throw ultimoError;
+  }
+
   async procesarConsulta(texto: string): Promise<string> {
     try {
       this.logger.log(`[IA-ASSISTANT] Solicitud: "${texto}"`);
 
       // PASO 1: CLASIFICACIÓN CON CONTROL ESTRICTO DE TOKENS
-      const clasificacion = await this.openai.chat.completions.create({
-        model: this.MODELO_IA,
+      const clasificacion = await this.crearCompletacion({
+        descripcion: 'clasificación',
         messages: [
           {
             role: 'system',
@@ -62,7 +119,8 @@ export class AiAssistantService {
           { role: 'user', content: texto }
         ],
         temperature: 0.0,
-        max_tokens: 20,
+        maxCompletionTokens: 20,
+        fallbackMaxCompletionTokens: 200,
       });
 
       const intencionLimpia = (clasificacion.choices[0].message?.content || '')
@@ -97,8 +155,8 @@ export class AiAssistantService {
       }
 
       // PASO 3: REDACCIÓN FINAL
-      const respuestaFinal = await this.openai.chat.completions.create({
-        model: this.MODELO_IA,
+      const respuestaFinal = await this.crearCompletacion({
+        descripcion: 'redacción final',
         messages: [
           { role: 'system', content: this.systemInstruction },
           {
@@ -120,7 +178,8 @@ export class AiAssistantService {
           { role: 'user', content: texto }
         ],
         temperature: 0.1,
-        max_tokens: 400,
+        maxCompletionTokens: 400,
+        fallbackMaxCompletionTokens: 1200,
       });
 
       let respuestaTexto = respuestaFinal.choices[0].message?.content?.trim() || 'Sin datos disponibles.';
@@ -132,7 +191,13 @@ export class AiAssistantService {
       return respuestaTexto.replace(/\$/g, 'Bs.');
 
     } catch (error: any) {
-      this.logger.error('Error crítico en el flujo del Asistente:', error?.message || error);
+      const status = error?.status ?? error?.response?.status;
+      const detalle =
+        error?.error?.message || error?.message || 'Error desconocido';
+
+      this.logger.error(
+        `[IA] Error crítico en el flujo del Asistente (modelo=${this.modeloPrincipal}, status=${status ?? 'N/A'}): ${detalle}`,
+      );
       return '⚠️ *Kantu (Kantuta AI)*: Experimentando dificultades técnicas de consulta en este momento.';
     }
   }
