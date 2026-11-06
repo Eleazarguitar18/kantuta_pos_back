@@ -251,8 +251,10 @@ export class MatrizControlService {
     const metaFila = new Map<string, Partial<MatrizControlFila>>();
     const comprasLibres = new Map<string, string>();
     const gastosLibres = new Map<string, string>();
+    const otrosIngresosLibres = new Map<string, string>();
     const compraLibreKeys: string[] = [];
     const gastoLibreKeys: string[] = [];
+    const otroIngresoLibreKeys: string[] = [];
 
     const registrarRubro = (rubro: RubroControl): void => {
       valoresFila.set(rubro.key, emptyValues());
@@ -315,6 +317,26 @@ export class MatrizControlService {
         key = crearClaveLibre('gasto', etiqueta);
         gastosLibres.set(etiqueta, key);
         gastoLibreKeys.push(key);
+        etiquetasFila.set(key, etiqueta);
+        valoresFila.set(key, emptyValues());
+        ajustesFila.set(key, 0);
+      }
+      agregar(key, indice, monto);
+    };
+
+    // Los "otros ingresos" son dinámicos: cada motivo de movimiento de caja que
+    // no tenga un rubro fijo genera su propia fila con ese nombre.
+    const asignarOtroIngresoLibre = (
+      label: string,
+      indice: number,
+      monto: number,
+    ): void => {
+      const etiqueta = label.trim() || 'Otros ingresos';
+      let key = otrosIngresosLibres.get(etiqueta);
+      if (!key) {
+        key = crearClaveLibre('otro', etiqueta);
+        otrosIngresosLibres.set(etiqueta, key);
+        otroIngresoLibreKeys.push(key);
         etiquetasFila.set(key, etiqueta);
         valoresFila.set(key, emptyValues());
         ajustesFila.set(key, 0);
@@ -504,7 +526,12 @@ export class MatrizControlService {
         const total = Number(row.total || 0);
 
         if (row.tipo === 'INGRESO') {
-          agregar(this.filaOtroIngreso(motivo), indice, total);
+          const key = this.filaOtroIngreso(motivo);
+          if (key === null) {
+            asignarOtroIngresoLibre(motivo, indice, total);
+          } else {
+            agregar(key, indice, total);
+          }
           continue;
         }
 
@@ -562,7 +589,14 @@ export class MatrizControlService {
       ),
     ];
     const pasivoKeys = RUBROS_PAGO_PASIVOS.map((r) => r.key);
-    const otroKeys = RUBROS_OTROS_INGRESOS.map((r) => r.key);
+    const otroKeys = [
+      ...RUBROS_OTROS_INGRESOS.map((r) => r.key),
+      ...[...otrosIngresosLibres.values()].sort((a, b) =>
+        String(etiquetasFila.get(a) || a).localeCompare(
+          String(etiquetasFila.get(b) || b),
+        ),
+      ),
+    ];
 
     const sumarKeys = (keys: string[]): number[] => {
       const resultado = emptyValues();
@@ -698,6 +732,7 @@ export class MatrizControlService {
         'TOTAL INGRESOS',
         ingresoKeys,
         true,
+        true,
       ),
       crearSeccion(
         'compras',
@@ -705,6 +740,7 @@ export class MatrizControlService {
         'COMPRAS',
         compraKeys,
         false,
+        true,
       ),
       crearSeccion(
         'gastos',
@@ -712,12 +748,14 @@ export class MatrizControlService {
         'GASTOS',
         gastoKeys,
         false,
+        true,
       ),
       crearSeccion(
         'pago_pasivos',
         'PAGO DE PASIVOS',
         'PAGO DE PASIVOS',
         pasivoKeys,
+        true,
         true,
       ),
       crearSeccion(
@@ -958,7 +996,8 @@ export class MatrizControlService {
             a.id - b.id,
         );
         const dia = ordenadas[0].fecha_apertura.getDate();
-        const cantidadSlots = Math.max(2, ordenadas.length);
+        // Una columna por cada sesión real del día (sin rellenar turnos vacíos).
+        const cantidadSlots = ordenadas.length;
 
         for (let slot = 0; slot < cantidadSlots; slot++) {
           const sesion = ordenadas[slot];
@@ -1184,7 +1223,7 @@ export class MatrizControlService {
     return motivo;
   }
 
-  private filaOtroIngreso(motivo: string): string {
+  private filaOtroIngreso(motivo: string): string | null {
     const m = normalize(motivo);
     if (m.includes('sobrante')) return 'otro.sobrantes';
     if (m.includes('verificacion') && m.includes('billete')) {
@@ -1204,6 +1243,6 @@ export class MatrizControlService {
     if (m.includes('material') && m.includes('escritorio')) {
       return 'otro.material_escritorio';
     }
-    return 'otro.otros';
+    return null;
   }
 }

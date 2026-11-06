@@ -83,7 +83,6 @@ export const RUBROS_OTROS_INGRESOS: RubroControl[] = [
   { key: 'otro.comision_bcp', label: 'COMISIONES POR BCP' },
   { key: 'otro.comision_tigo_money', label: 'COMISIONES TIGO MONEY' },
   { key: 'otro.intereses_bcp', label: 'INTERESES BCP' },
-  { key: 'otro.otros', label: 'OTROS INGRESOS' },
   { key: 'otro.comision_chips_viva', label: 'COMISIONES CHIPS VIVA' },
   { key: 'otro.comision_chip_tigo', label: 'COMISIONES CHIP TIGO' },
   { key: 'otro.prestamo', label: 'PRESTAMO' },
