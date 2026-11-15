@@ -18,12 +18,14 @@ import { PrestamoCaja } from 'src/cajas/entities/prestamo-caja.entity';
 import { PrestamoExterno } from 'src/prestamos-externos/entities/prestamo-externo.entity';
 import { CuentaPorCobrar } from 'src/ventas/entities/cuenta-por-cobrar.entity';
 import { OperadorDeuda } from 'src/agentes/entities/operador-deuda.entity';
+import { Categoria } from 'src/inventario/entities/categoria.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Venta,
       Producto,
+      Categoria,
       RecargaCliente,
       InyeccionOperadora,
       SesionCaja,

@@ -7,14 +7,14 @@ import { RecargaCliente } from 'src/recargas/entities/recarga-cliente.entity';
 import { InyeccionOperadora } from 'src/recargas/entities/inyeccion-operadora.entity';
 import { Compra } from 'src/compras/entities/compra.entity';
 import { MovimientoCaja } from 'src/cajas/entities/movimiento-caja.entity';
+import { Categoria } from 'src/inventario/entities/categoria.entity';
 import { FiltroMatrizControlDto } from '../dto/filtro-matriz-control.dto';
 import {
   FILA_CAJA,
   RUBROS_COMPRAS,
-  RUBROS_GASTOS,
-  RUBROS_INGRESOS,
   RUBROS_OTROS_INGRESOS,
   RUBROS_PAGO_PASIVOS,
+  RUBROS_RECARGAS,
   RubroControl,
 } from './matriz-control-layout';
 import {
@@ -159,7 +159,6 @@ interface RawVentaRow {
   id_sesion: string;
   metodo_pago: string;
   categoria: string;
-  producto: string;
   total: string;
 }
 
@@ -209,6 +208,8 @@ export class MatrizControlService {
     private readonly compraRepository: Repository<Compra>,
     @InjectRepository(MovimientoCaja)
     private readonly movimientoCajaRepository: Repository<MovimientoCaja>,
+    @InjectRepository(Categoria)
+    private readonly categoriaRepository: Repository<Categoria>,
     private readonly responsabilidadesService: MatrizControlResponsabilidadesService,
   ) {}
 
@@ -262,10 +263,43 @@ export class MatrizControlService {
       ajustesFila.set(rubro.key, 0);
     };
 
-    [...RUBROS_INGRESOS, ...RUBROS_COMPRAS, ...RUBROS_GASTOS, ...RUBROS_PAGO_PASIVOS, ...RUBROS_OTROS_INGRESOS].forEach(
-      registrarRubro,
+    // Los ingresos se agrupan por categoría de producto del sistema. Se
+    // registran todas las categorías activas y, si aparece una venta de una
+    // categoría no listada, se crea su fila en el momento.
+    const categoriasIngreso = new Map<string, string>();
+    const registrarCategoriaIngreso = (nombre: string): string => {
+      const etiqueta = nombre.trim() || 'Sin categoría';
+      const base = `ingreso.categoria.${slug(etiqueta)}`;
+      let key = base;
+      let intento = 2;
+      while (
+        categoriasIngreso.has(key) &&
+        categoriasIngreso.get(key) !== etiqueta
+      ) {
+        key = `${base}_${intento}`;
+        intento += 1;
+      }
+      if (!categoriasIngreso.has(key)) {
+        categoriasIngreso.set(key, etiqueta);
+        registrarRubro({ key, label: etiqueta });
+      }
+      return key;
+    };
+
+    [
+      ...RUBROS_RECARGAS,
+      ...RUBROS_COMPRAS,
+      ...RUBROS_PAGO_PASIVOS,
+      ...RUBROS_OTROS_INGRESOS,
+    ].forEach(registrarRubro);
+
+    const categoriasProducto = await this.categoriaRepository.find({
+      where: { estado: true },
+      order: { nombre: 'ASC' },
+    });
+    categoriasProducto.forEach((categoria) =>
+      registrarCategoriaIngreso(categoria.nombre),
     );
-    etiquetasFila.set('gasto.sueldo', `SUELDO ${MESES[dto.mes - 1]}`);
 
     const agregar = (key: string, indice: number, monto: number): void => {
       const valores = valoresFila.get(key) || emptyValues();
@@ -359,7 +393,6 @@ export class MatrizControlService {
         .select('v.id_sesion_caja', 'id_sesion')
         .addSelect('v.metodo_pago', 'metodo_pago')
         .addSelect("COALESCE(cat.nombre, 'Sin categoría')", 'categoria')
-        .addSelect("COALESCE(p.nombre, '')", 'producto')
         .addSelect('SUM(d.subtotal)', 'total')
         .where('v.id_sesion_caja IN (:...ids)', { ids })
         .andWhere('v.estado = true')
@@ -369,7 +402,6 @@ export class MatrizControlService {
         .groupBy('v.id_sesion_caja')
         .addGroupBy('v.metodo_pago')
         .addGroupBy('cat.nombre')
-        .addGroupBy('p.nombre')
         .getRawMany<RawVentaRow>();
 
       for (const row of ventasRaw) {
@@ -384,23 +416,8 @@ export class MatrizControlService {
           continue;
         }
 
-        if (metodo === 'QR') {
-          agregar('ingreso.qr', indice, total);
-          continue;
-        }
-
-        const producto = String(row.producto || '').trim();
         const categoria = String(row.categoria || 'Sin categoría').trim();
-        const key = this.mapearIngreso(producto, categoria);
-
-        if (key === null) {
-          advertir(
-            `Venta sin rubro de ingreso: ${producto || categoria} (${categoria}).`,
-          );
-          agregar('ingreso.material_escritorio', indice, total);
-        } else {
-          agregar(key, indice, total);
-        }
+        agregar(registrarCategoriaIngreso(categoria), indice, total);
       }
 
       const recargasRaw = await this.recargaClienteRepository
@@ -422,10 +439,9 @@ export class MatrizControlService {
         const key = this.filaRecarga(operadora);
         if (key === null) {
           advertir(`Recarga sin operadora reconocida: ${operadora}.`);
-          agregar('ingreso.recarga_entel', indice, Number(row.total || 0));
-        } else {
-          agregar(key, indice, Number(row.total || 0));
+          continue;
         }
+        agregar(key, indice, Number(row.total || 0));
       }
 
       const comprasRaw = await this.compraRepository
@@ -535,18 +551,14 @@ export class MatrizControlService {
           continue;
         }
 
-        const key = this.filaGastoPorMotivo(motivo);
-        if (key === null) {
-          asignarGastoLibre(this.etiquetaGasto(motivo), indice, total);
-        } else {
-          agregar(key, indice, total);
-        }
+        // Los gastos son dinámicos: cada motivo de egreso es su propia fila.
+        asignarGastoLibre(this.etiquetaGasto(motivo), indice, total);
       }
     }
 
     if (ventasCreditoTotal > 0) {
       advertir(
-        `Ventas a crédito incluidas en ACTIVOS sin impacto en caja: Bs ${ventasCreditoTotal.toFixed(2)}.`,
+        `Ventas a crédito incluidas en CUENTAS POR COBRAR sin impacto en caja: Bs ${ventasCreditoTotal.toFixed(2)}.`,
       );
     }
 
@@ -571,7 +583,12 @@ export class MatrizControlService {
       ),
     );
 
-    const ingresoKeys = RUBROS_INGRESOS.map((r) => r.key);
+    const ingresoKeys = [
+      ...[...categoriasIngreso.entries()]
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([key]) => key),
+      ...RUBROS_RECARGAS.map((r) => r.key),
+    ];
     const compraKeys = [
       ...RUBROS_COMPRAS.map((r) => r.key),
       ...[...comprasLibres.values()].sort((a, b) =>
@@ -581,7 +598,6 @@ export class MatrizControlService {
       ),
     ];
     const gastoKeys = [
-      ...RUBROS_GASTOS.map((r) => r.key),
       ...[...gastosLibres.values()].sort((a, b) =>
         String(etiquetasFila.get(a) || a).localeCompare(
           String(etiquetasFila.get(b) || b),
@@ -767,8 +783,8 @@ export class MatrizControlService {
       ),
       crearSeccion(
         'activos',
-        'ACTIVOS',
-        'ACTIVOS',
+        'CUENTAS POR COBRAR',
+        'TOTAL CUENTAS POR COBRAR',
         activoKeys,
         true,
         true,
@@ -800,7 +816,7 @@ export class MatrizControlService {
       );
       const total = crearFila(
         'deudas_agentes.total',
-        'DEUDAS CON AGENTES',
+        'DEUDAS DE OPERADORES CON AGENTES',
         'total',
         true,
         emptyValues(),
@@ -809,7 +825,7 @@ export class MatrizControlService {
       total.total = totalDeudas;
       deudasAgentes = {
         key: 'deudas_agentes',
-        label: 'DEUDAS CON AGENTES',
+        label: 'DEUDAS DE OPERADORES CON AGENTES',
         filas,
         total,
       };
@@ -1060,36 +1076,6 @@ export class MatrizControlService {
     return columnas;
   }
 
-  private mapearIngreso(producto: string, categoria: string): string | null {
-    const p = normalize(producto);
-    const c = normalize(categoria);
-
-    if (p.includes('memoria') || p.includes('microsd')) return 'ingreso.memorias';
-    if (p.includes('audifono')) return 'ingreso.audifonos';
-    if (p.includes('usb')) return 'ingreso.usb';
-    if (p.includes('carga') && p.includes('celular')) return 'ingreso.carga_celulares';
-    if (p.includes('cargador') || p.includes('cable')) return 'ingreso.cargadores';
-    if (p.includes('fotocopia')) return 'ingreso.fotocopias';
-    if (p.includes('anillado') || p.includes('anillo')) return 'ingreso.anillados';
-    if (p.includes('impresion')) return 'ingreso.impresiones';
-    if (p.includes('recuperacion')) return 'ingreso.recuperacion_linea';
-    if (p.includes('plataforma')) return 'ingreso.plataformas';
-    if (c.includes('chip')) return 'ingreso.chips';
-    if (c.includes('tarjeta')) return 'ingreso.tarjetas';
-    if (c.includes('tecnologia')) return 'ingreso.cargadores';
-    if (
-      c.includes('escritorio') ||
-      c.includes('cuaderno') ||
-      c.includes('papeleria') ||
-      c.includes('mochila') ||
-      c.includes('estuche')
-    ) {
-      return 'ingreso.material_escritorio';
-    }
-
-    return null;
-  }
-
   private filaRecarga(operadora: string): string | null {
     const o = normalize(operadora);
     if (o.includes('entel')) return 'ingreso.recarga_entel';
@@ -1154,57 +1140,6 @@ export class MatrizControlService {
     const cat = categoria.trim();
     if (cat && normalize(cat) !== 'sin categoria') return cat;
     return producto.trim() || 'Otras compras';
-  }
-
-  private filaGastoPorMotivo(motivo: string): string | null {
-    const m = normalize(motivo);
-
-    if (m.includes('factura')) return 'gasto.facturas';
-    if (m.includes('contable')) return 'gasto.servicios_contables';
-    if (m.includes('pasaje') && m.includes('bcp')) return 'gasto.pasajes_bcp';
-    if (m.includes('pasaje')) return 'gasto.pasajes';
-    if (m.includes('interes') && m.includes('bcp') && m.includes('2')) {
-      return 'gasto.interes_bcp_2';
-    }
-    if (m.includes('interes') && m.includes('bcp')) return 'gasto.interes_bcp_1';
-    if (m.includes('recarga') && m.includes('celular')) {
-      return 'gasto.recarga_celulares';
-    }
-    if (m.includes('carga') && m.includes('celular')) {
-      return 'gasto.carga_celulares';
-    }
-    if (m.includes('mantenimiento') && m.includes('fotocopiadora')) {
-      return 'gasto.mantenimiento_fotocopiadora';
-    }
-    if (m.includes('billete') && m.includes('serie')) {
-      return 'gasto.billete_doble_serie';
-    }
-    if (m.includes('material') && m.includes('escritorio')) {
-      return 'gasto.material_escritorio';
-    }
-    if (m.includes('deposito') && m.includes('juan carlos')) {
-      return 'gasto.deposito_juan_carlos';
-    }
-    if (m.includes('internet')) return 'gasto.internet';
-    if (m.includes('refrigerio')) return 'gasto.refrigerio';
-    if (m.includes('mantenimiento') && m.includes('local')) {
-      return 'gasto.mantenimiento_local';
-    }
-    if (m.includes('lavado') && m.includes('acera')) return 'gasto.lavado_acera';
-    if (m.includes('falla') && m.includes('chip')) {
-      return 'gasto.falla_chips_entel';
-    }
-    if (m.includes('alquiler')) return 'gasto.alquiler';
-    if (m.includes('luz')) return 'gasto.servicio_luz';
-    if (m.includes('agua')) return 'gasto.agua';
-    if (m.includes('navidad')) return 'gasto.navidena';
-    if (m.includes('impuesto')) return 'gasto.impuestos';
-    if (m.includes('retiro') && m.includes('sobrante')) {
-      return 'gasto.retiro_sobrante';
-    }
-    if (m.includes('sueldo')) return 'gasto.sueldo';
-
-    return null;
   }
 
   private etiquetaGasto(motivo: string): string {

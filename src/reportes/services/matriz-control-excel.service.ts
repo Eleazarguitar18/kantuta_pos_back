@@ -127,16 +127,21 @@ export class MatrizControlExcelService {
 
     data.columnas.forEach((columna, index) => {
       const cell = ws.getCell(2, 2 + index);
-      cell.value = columna.etiqueta_operador;
+      cell.value = columna.operador
+        ? `${columna.etiqueta_operador}\n${columna.operador}`
+        : columna.etiqueta_operador;
       cell.font = { name: 'Calibri', size: 11, bold: true };
+      cell.alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+        wrapText: true,
+      };
 
       if (!columna.vacia) {
         const horario = columna.hora_apertura
           ? `${columna.hora_apertura}${columna.hora_cierre ? ` - ${columna.hora_cierre}` : ' - actual'}`
           : '';
-        const detalle = [columna.operador, columna.caja, horario]
-          .filter(Boolean)
-          .join('\n');
+        const detalle = [columna.caja, horario].filter(Boolean).join('\n');
         if (detalle) {
           cell.note = { texts: [{ text: detalle }] };
         }
