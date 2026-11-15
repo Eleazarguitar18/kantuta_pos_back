@@ -18,11 +18,15 @@ import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
 import { CrearPrestamoDto, PagarPrestamoDto } from './dto/crear-prestamo.dto';
 import { CreateCajaDto } from './dto/create-caja.dto';
 import { UpdateCajaDto } from './dto/update-caja.dto';
+import { ResolverDescuadreDto } from './dto/resolver-descuadre.dto';
 import { AppGateway } from 'src/gateway/app.gateway';
 
 import { Producto } from '../inventario/entities/producto.entity';
 import { Usuario } from '../usuario/entities/usuario.entity';
 import { Venta } from '../ventas/entities/venta.entity';
+
+const round2 = (value: number): number =>
+  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
 @Injectable()
 export class CajasService {
@@ -828,11 +832,14 @@ export class CajasService {
     });
   }
 
-  async resolverDescuadre(
-    id: number,
-    body: { estado_resolucion: string; observacion_resolucion?: string; id_user_update: number },
-  ) {
-    const { estado_resolucion, observacion_resolucion, id_user_update } = body;
+  async resolverDescuadre(id: number, body: ResolverDescuadreDto) {
+    const {
+      estado_resolucion,
+      observacion_resolucion,
+      monto_recuperado,
+      fecha_resolucion,
+      id_user_update,
+    } = body;
     const descuadre = await this.descuadreCajaInventarioRepository.findOne({
       where: { id },
       relations: ['operador_culpable', 'producto', 'sesion_caja'],
@@ -842,7 +849,30 @@ export class CajasService {
       throw new NotFoundException(`Descuadre con ID ${id} no encontrado`);
     }
 
+    const diferencia = Number(descuadre.diferencia ?? 0);
+    const costoUnitario = Number(descuadre.producto?.costo_compra ?? 0);
+    const precioVentaUnitario = Number(descuadre.producto?.precio_venta ?? 0);
+    const precioUnitario = costoUnitario > 0 ? costoUnitario : precioVentaUnitario;
+    const deudaEstimada = round2(
+      descuadre.tipo === 'EFECTIVO'
+        ? Math.abs(diferencia)
+        : Math.abs(diferencia) * precioUnitario,
+    );
+    const fecha = fecha_resolucion ? new Date(fecha_resolucion) : new Date();
+    const monto =
+      estado_resolucion === 'JUSTIFICADO'
+        ? 0
+        : round2(
+            Number(
+              monto_recuperado === null || monto_recuperado === undefined
+                ? deudaEstimada
+                : monto_recuperado,
+            ),
+          );
+
     descuadre.estado_resolucion = estado_resolucion;
+    descuadre.fecha_resolucion = fecha;
+    descuadre.monto_recuperado = monto;
     if (observacion_resolucion) {
       descuadre.observacion = descuadre.observacion
         ? `${descuadre.observacion} | [Resolución Admin]: ${observacion_resolucion}`
@@ -854,10 +884,15 @@ export class CajasService {
 
     // Sincronizar también en descuadreInventarioCaja si existe
     const descuadreInv = await this.descuadreInventarioCajaRepository.findOne({
-      where: { id_sesion_caja: descuadre.id_sesion_caja, id_producto: descuadre.producto_id },
+      where: {
+        id_sesion_caja: descuadre.id_sesion_caja,
+        id_producto: descuadre.producto_id,
+      },
     });
     if (descuadreInv) {
       descuadreInv.estado_resolucion = estado_resolucion;
+      descuadreInv.fecha_resolucion = fecha;
+      descuadreInv.monto_recuperado = monto;
       descuadreInv.id_user_update = id_user_update;
       await this.descuadreInventarioCajaRepository.save(descuadreInv);
     }
@@ -1126,6 +1161,7 @@ export class CajasService {
 
     prestamo.estado_prestamo = 'PAGADO';
     prestamo.fecha_devolucion = new Date();
+    prestamo.id_sesion_devolucion = id_sesion_caja;
     prestamo.id_user_update = id_user_update;
 
     const prestamoPagado = await this.prestamoCajaRepository.save(prestamo);

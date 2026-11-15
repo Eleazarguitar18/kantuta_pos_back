@@ -29,6 +29,14 @@ export class CuentaPorCobrar extends BaseEntityAudit {
   @Column({ type: 'timestamp', nullable: true })
   fecha_pago: Date;
 
+  @ApiProperty({
+    example: 101,
+    description: 'Sesión de caja donde se cobró la cuenta',
+    required: false,
+  })
+  @Column({ name: 'id_sesion_pago', type: 'int', nullable: true })
+  id_sesion_pago: number | null;
+
   @ApiProperty({ example: 'EFECTIVO', nullable: true })
   @Column({ nullable: true })
   metodo_pago_cancelacion: string;

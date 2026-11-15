@@ -74,4 +74,18 @@ export class DescuadreInventarioCaja extends BaseEntityAudit {
   @ApiProperty({ example: 'PENDIENTE', enum: ['PENDIENTE', 'RESUELTO', 'JUSTIFICADO'], description: 'Estado de resolución del descuadre' })
   @Column({ type: 'varchar', length: 20, default: 'PENDIENTE' })
   estado_resolucion: string;
+
+  @ApiProperty({ description: 'Fecha en que se recuperó o justificó la deuda', required: false })
+  @Column({ name: 'fecha_resolucion', type: 'timestamp', nullable: true })
+  fecha_resolucion?: Date | null;
+
+  @ApiProperty({ example: 50, description: 'Monto efectivamente recuperado', required: false })
+  @Column({
+    name: 'monto_recuperado',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  monto_recuperado?: number | null;
 }

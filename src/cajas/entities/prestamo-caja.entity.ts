@@ -35,4 +35,11 @@ export class PrestamoCaja extends BaseEntityAudit {
 
   @Column({ name: 'id_sesion_caja' })
   id_sesion_caja: number;
+
+  @ApiProperty({
+    description: 'Sesión de caja donde se recibió la devolución',
+    required: false,
+  })
+  @Column({ name: 'id_sesion_devolucion', type: 'int', nullable: true })
+  id_sesion_devolucion?: number | null;
 }
