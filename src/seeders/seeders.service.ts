@@ -177,7 +177,7 @@ export class SeedersService implements OnModuleInit {
         admin.persona = await this.crearPersona('Sistema', 'Administrador', 'POS', 'M');
         cambios = true;
       }
-      if (!admin.role) {
+      if (!admin.role || admin.role.nombre !== adminRole.nombre) {
         admin.role = adminRole;
         cambios = true;
       }
