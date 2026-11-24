@@ -30,6 +30,7 @@ export class PrestamosExternosService {
 
   async crear(
     crearPrestamoExternoDto: CrearPrestamoExternoDto,
+    idUsuarioAutenticado?: number,
   ): Promise<PrestamoExterno> {
     const {
       caja_sesion_id,
@@ -40,6 +41,10 @@ export class PrestamosExternosService {
       motivo,
       id_user_create,
     } = crearPrestamoExternoDto;
+
+    // La caja afectada siempre es la sesión activa del usuario que ejecuta la
+    // operación (el token JWT manda sobre el id enviado en el body).
+    const idUsuarioOperador = idUsuarioAutenticado ?? id_user_create;
 
     // Compatibilidad: el frontend puede enviar id_autorizador o autorizador_id
     const autorizadorId = autorizador_id ?? id_autorizador;
@@ -69,12 +74,30 @@ export class PrestamosExternosService {
         );
       }
 
-      // Si no llega la sesión, usamos la sesión abierta del usuario que registra
+      if (caja_sesion_id) {
+        const sesionSolicitada = await queryRunner.manager.findOne(SesionCaja, {
+          where: {
+            id: caja_sesion_id,
+            id_usuario: idUsuarioOperador,
+            estado: true,
+            estado_sesion: 'ABIERTA',
+          },
+        });
+
+        if (!sesionSolicitada) {
+          throw new BadRequestException(
+            'La sesión de caja indicada no es la sesión activa del usuario que registra el préstamo externo',
+          );
+        }
+      }
+
+      // Si no llega la sesión, usamos la sesión abierta del usuario que ejecuta
+      // la operación, no la de otro operador ni la última sesión cerrada.
       let idSesionCaja = caja_sesion_id;
       if (!idSesionCaja) {
         const sesionAbierta = await queryRunner.manager.findOne(SesionCaja, {
           where: {
-            id_usuario: id_user_create,
+            id_usuario: idUsuarioOperador,
             estado: true,
             estado_sesion: 'ABIERTA',
           },
@@ -181,8 +204,13 @@ export class PrestamosExternosService {
   async actualizarEstado(
     id: number,
     actualizarEstadoPrestamoDto: ActualizarEstadoPrestamoDto,
+    idUsuarioAutenticado?: number,
   ): Promise<PrestamoExterno> {
     const { estado, caja_sesion_id, id_user_update } = actualizarEstadoPrestamoDto;
+
+    // La devolución entra en la caja de la sesión activa del usuario que la
+    // registra, que puede ser distinto de quien hizo el préstamo.
+    const idUsuarioOperador = idUsuarioAutenticado ?? id_user_update;
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -205,7 +233,43 @@ export class PrestamosExternosService {
       }
 
       if (estado === EstadoPrestamoExterno.PAGADO) {
-        const idSesionDevolucion = caja_sesion_id ?? prestamo.caja_sesion_id;
+        if (caja_sesion_id) {
+          const sesionSolicitada = await queryRunner.manager.findOne(SesionCaja, {
+            where: {
+              id: caja_sesion_id,
+              id_usuario: idUsuarioOperador,
+              estado: true,
+              estado_sesion: 'ABIERTA',
+            },
+          });
+
+          if (!sesionSolicitada) {
+            throw new BadRequestException(
+              'La sesión de caja indicada no es la sesión activa del usuario que registra la devolución',
+            );
+          }
+        }
+
+        let idSesionDevolucion = caja_sesion_id;
+        if (!idSesionDevolucion) {
+          const sesionAbierta = await queryRunner.manager.findOne(SesionCaja, {
+            where: {
+              id_usuario: idUsuarioOperador,
+              estado: true,
+              estado_sesion: 'ABIERTA',
+            },
+            order: { id: 'DESC' },
+          });
+
+          if (!sesionAbierta) {
+            throw new BadRequestException(
+              'No hay una sesión de caja abierta para el usuario que registra la devolución del préstamo externo',
+            );
+          }
+
+          idSesionDevolucion = sesionAbierta.id;
+        }
+
         const sesion = await queryRunner.manager.findOne(SesionCaja, {
           where: { id: idSesionDevolucion, estado: true },
           lock: { mode: 'pessimistic_write' },

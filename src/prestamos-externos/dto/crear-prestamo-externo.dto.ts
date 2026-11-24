@@ -4,7 +4,8 @@ import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-va
 export class CrearPrestamoExternoDto {
   @ApiProperty({
     example: 101,
-    description: 'ID de la sesión de caja activa (si se omite se usa la del usuario que registra)',
+    description:
+      'ID de la sesión de caja (debe pertenecer a la sesión activa del usuario autenticado; si se omite se usa esa sesión)',
     required: false,
   })
   @IsInt()
