@@ -54,8 +54,8 @@ El proyecto sigue una arquitectura orientada a dominios, organizada en los sigui
 
 2. Configura las variables de entorno:
    Crea un archivo `.env` en la raíz del proyecto (puedes basarte en `.env.example` si está disponible) con las siguientes configuraciones:
-   - Credenciales de PostgreSQL (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`)
-   - Configuración de Redis (`REDIS_HOST`, `REDIS_PORT`)
+   - Credenciales de PostgreSQL (`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `DATABASE_SSL`)
+   - Configuración de Redis (`REDIS_URL`, o `REDIS_HOST`/`REDIS_PORT`)
    - Secreto para JWT (`JWT_SECRET`)
    - Configuración de correo (SMTP o API Keys)
 
@@ -65,12 +65,19 @@ El proyecto sigue una arquitectura orientada a dominios, organizada en los sigui
 # Desarrollo con recarga automática
 npm run start:dev
 
+# Desarrollo contra la BD de pruebas (carga .env.test)
+npm run start:test
+
 # Compilación para producción
 npm run build
 
 # Ejecución en producción
 npm run start:prod
 ```
+
+### Entorno de pruebas
+
+Cuando `NODE_ENV=test`, `ConfigModule` carga `.env.test` en lugar de `.env`. Ese archivo no se versiona y se genera a partir de la URL de la BD de pruebas que ya está comentada al final de `.env`; mantiene el resto de variables (JWT, correo, IA) del archivo local.
 
 ## 📖 Documentación de la API (Swagger)
 
