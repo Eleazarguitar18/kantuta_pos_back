@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { AppGateway } from 'src/gateway/app.gateway';
 import { Caja } from '../cajas/entities/caja.entity';
 import { MovimientoCaja } from '../cajas/entities/movimiento-caja.entity';
 import { SesionCaja } from '../cajas/entities/sesion-caja.entity';
@@ -26,6 +27,7 @@ export class PrestamosExternosService {
     @InjectRepository(Usuario)
     private readonly usuarioRepository: Repository<Usuario>,
     private readonly dataSource: DataSource,
+    private readonly appGateway: AppGateway,
   ) {}
 
   async crear(
@@ -166,6 +168,11 @@ export class PrestamosExternosService {
 
       const nuevoPrestamo = await queryRunner.manager.save(prestamo);
       await queryRunner.commitTransaction();
+
+      // Emitir solo después del commit para que la tarjeta de saldo del header
+      // y el listado se recalculen vía Socket.IO en todos los clientes.
+      this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+      this.appGateway.notifyDataChange('prestamo_externo', 'creado');
 
       return nuevoPrestamo;
     } catch (err) {
@@ -319,6 +326,14 @@ export class PrestamosExternosService {
 
       const prestamoActualizado = await queryRunner.manager.save(prestamo);
       await queryRunner.commitTransaction();
+
+      if (estado === EstadoPrestamoExterno.PAGADO) {
+        this.appGateway.notifyDataChange('caja', 'saldo_actualizado');
+      }
+      this.appGateway.notifyDataChange(
+        'prestamo_externo',
+        estado === EstadoPrestamoExterno.PAGADO ? 'pagado' : 'actualizado',
+      );
 
       return prestamoActualizado;
     } catch (err) {
