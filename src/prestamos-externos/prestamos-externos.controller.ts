@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   Query,
   UseGuards,
   UsePipes,
@@ -37,8 +38,11 @@ export class PrestamosExternosController {
   @UsePipes(dtoValidationPipe)
   @Post()
   @ApiOperation({ summary: 'Registrar un préstamo externo desde caja activa' })
-  crear(@Body() crearPrestamoExternoDto: CrearPrestamoExternoDto) {
-    return this.prestamosExternosService.crear(crearPrestamoExternoDto);
+  crear(@Body() crearPrestamoExternoDto: CrearPrestamoExternoDto, @Req() req: any) {
+    return this.prestamosExternosService.crear(
+      crearPrestamoExternoDto,
+      req.user?.sub,
+    );
   }
 
   @Get()
@@ -58,12 +62,17 @@ export class PrestamosExternosController {
   pagar(
     @Param('id') id: string,
     @Body() pagarPrestamoExternoDto: PagarPrestamoExternoDto,
+    @Req() req: any,
   ) {
-    return this.prestamosExternosService.actualizarEstado(+id, {
-      estado: EstadoPrestamoExterno.PAGADO,
-      id_user_update: pagarPrestamoExternoDto.id_user_update,
-      caja_sesion_id: pagarPrestamoExternoDto.caja_sesion_id,
-    });
+    return this.prestamosExternosService.actualizarEstado(
+      +id,
+      {
+        estado: EstadoPrestamoExterno.PAGADO,
+        id_user_update: pagarPrestamoExternoDto.id_user_update,
+        caja_sesion_id: pagarPrestamoExternoDto.caja_sesion_id,
+      },
+      req.user?.sub,
+    );
   }
 
   @UsePipes(dtoValidationPipe)
@@ -72,10 +81,12 @@ export class PrestamosExternosController {
   actualizarEstado(
     @Param('id') id: string,
     @Body() actualizarEstadoPrestamoDto: ActualizarEstadoPrestamoDto,
+    @Req() req: any,
   ) {
     return this.prestamosExternosService.actualizarEstado(
       +id,
       actualizarEstadoPrestamoDto,
+      req.user?.sub,
     );
   }
 }

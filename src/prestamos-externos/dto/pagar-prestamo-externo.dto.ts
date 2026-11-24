@@ -10,7 +10,7 @@ export class PagarPrestamoExternoDto {
   @ApiProperty({
     example: 101,
     description:
-      'ID de la sesión de caja que recibe la devolución (si se omite se usa la del préstamo)',
+      'ID de la sesión de caja que recibe la devolución (debe ser la sesión activa del usuario autenticado; si se omite se usa esa sesión)',
     required: false,
   })
   @IsInt()

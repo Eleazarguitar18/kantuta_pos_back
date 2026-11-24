@@ -33,7 +33,10 @@ import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'test' ? '.env.test' : '.env',
+    }),
     CacheModule.registerAsync(RedisConfig),
     TypeOrmModule.forRootAsync(DatabaseConfig),
     JwtModule.registerAsync({
