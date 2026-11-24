@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -15,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { MailService } from 'src/mail/mail.service';
+import { AppGateway } from 'src/gateway/app.gateway';
 
 @Injectable()
 export class UsuarioService {
@@ -27,6 +29,7 @@ export class UsuarioService {
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
     private jwtService: JwtService,
+    private readonly appGateway: AppGateway,
   ) {}
 
   async create(createAuthDto: CreateAuthDto) {
@@ -79,9 +82,9 @@ export class UsuarioService {
   }
 
   async findAll() {
-    // Incluimos persona y rol para que el frontend pueda mostrarlos en las tablas
+    // Se listan activos e inactivos: el administrador debe poder reactivar.
+    // Incluimos persona y rol para que el frontend pueda mostrarlos en las tablas.
     const data = await this.userRepository.find({
-      where: { estado: true },
       relations: ['persona', 'role'],
       order: { id: 'ASC' },
     });
@@ -135,7 +138,11 @@ export class UsuarioService {
   }
 
   // updates
-  async update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
+  async update(
+    id: number,
+    updateUsuarioDto: UpdateUsuarioDto,
+    idUsuarioAutenticado?: number,
+  ) {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: ['persona', 'role'],
@@ -145,6 +152,17 @@ export class UsuarioService {
       throw new NotFoundException(`No existen datos de usuario con ID ${id}`);
     }
 
+    if (
+      updateUsuarioDto.estado === false &&
+      idUsuarioAutenticado !== undefined &&
+      id === idUsuarioAutenticado
+    ) {
+      throw new BadRequestException(
+        'No puede desactivar su propio usuario.',
+      );
+    }
+
+    const estadoAnterior = user.estado;
     const { id_role, password, ...rest } = updateUsuarioDto;
 
     // Si se proporciona una nueva contraseña no vacía, encriptarla con bcrypt
@@ -159,16 +177,27 @@ export class UsuarioService {
 
     Object.assign(user, rest);
 
-    return await this.userRepository.save(user);
+    const guardado = await this.userRepository.save(user);
+
+    if (guardado.estado !== estadoAnterior) {
+      this.appGateway.notifyDataChange('usuario', 'estado_actualizado');
+    }
+
+    return guardado;
   }
 
-  async remove(id: number) {
+  async remove(id: number, idUsuarioAutenticado?: number) {
     const data = await this.userRepository.findOneBy({ id: id });
     if (!data) {
       throw new NotFoundException(`No existen datos de usuario`);
     }
+    if (idUsuarioAutenticado !== undefined && id === idUsuarioAutenticado) {
+      throw new BadRequestException('No puede desactivar su propio usuario.');
+    }
     data.estado = false;
 
-    return await this.userRepository.save(data);
+    const guardado = await this.userRepository.save(data);
+    this.appGateway.notifyDataChange('usuario', 'estado_actualizado');
+    return guardado;
   }
 }

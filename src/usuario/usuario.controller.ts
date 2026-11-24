@@ -7,7 +7,12 @@ import {
   Param,
   Delete,
   HttpException,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from 'src/auth/guards/auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UsuarioService } from './usuario.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -24,6 +29,8 @@ export class UsuarioController {
     return await this.usuarioService.create(createAuthDto);
   }
 
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Administrador')
   @Get()
   async findAll() {
     const respuesta = await this.usuarioService.findAll();
@@ -51,16 +58,21 @@ export class UsuarioController {
     return respuesta;
   }
 
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Administrador')
   @Patch(':id')
   async update(
     @Param('id') id: string,
     @Body() updateUsuarioDto: UpdateUsuarioDto,
+    @Req() req: any,
   ) {
-    return await this.usuarioService.update(+id, updateUsuarioDto);
+    return await this.usuarioService.update(+id, updateUsuarioDto, req.user?.sub);
   }
 
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Administrador')
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usuarioService.remove(+id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.usuarioService.remove(+id, req.user?.sub);
   }
 }

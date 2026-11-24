@@ -88,6 +88,11 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
+    if (user.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
+    }
     const isPasswordValid = await this.comparePassword(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Contraseña incorrecta');
@@ -119,30 +124,36 @@ export class AuthService {
   async refresh_token(
     refresh_token: string,
   ): Promise<{ access_token: string }> {
+    let payload: { sub: number };
     try {
-      const payload = await this.jwtService.verifyAsync(refresh_token, {
+      payload = await this.jwtService.verifyAsync(refresh_token, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
       });
-
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
-      });
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      const newAccessToken = await this.jwtService.signAsync(
-        { sub: user.id, username: user.name },
-        {
-          secret: this.configService.get('JWT_SECRET'),
-          expiresIn: this.configService.get('JWT_EXPIRES_IN') || '15m',
-        },
-      );
-
-      return { access_token: newAccessToken };
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    if (user.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
+    }
+
+    const newAccessToken = await this.jwtService.signAsync(
+      { sub: user.id, username: user.name },
+      {
+        secret: this.configService.get('JWT_SECRET'),
+        expiresIn: this.configService.get('JWT_EXPIRES_IN') || '15m',
+      },
+    );
+
+    return { access_token: newAccessToken };
   }
 
   async changePassword(email: string, newPassword: string) {
@@ -150,6 +161,11 @@ export class AuthService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+    if (user.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
     }
     const passwordHash = await this.encriptar_password(newPassword);
     user.password = passwordHash;
@@ -168,6 +184,11 @@ export class AuthService {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+    if (user.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
     }
 
     // 2. Generar el código (puedes seguir usando crypto o un random simple)
@@ -189,6 +210,13 @@ export class AuthService {
   }
 
   async confirmCode(email: string, code: string): Promise<{ message: string }> {
+    const usuario = await this.userRepository.findOne({ where: { email } });
+    if (usuario?.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
+    }
+
     const redisKey = `reset_password:${email}`;
 
     // 1. Intentar obtener el código de Redis
@@ -218,6 +246,11 @@ export class AuthService {
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+    if (user.estado === false) {
+      throw new UnauthorizedException(
+        'Usuario desactivado. Contacte con el administrador.',
+      );
     }
 
     // 5. Encriptar y Guardar en Postgres
